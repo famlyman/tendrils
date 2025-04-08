@@ -5,8 +5,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function HowItWorks() {
   const handleSkip = async () => {
-    await AsyncStorage.setItem("hasCompletedOnboarding", "skipped");
-    router.push("/home");
+    console.log("Skip pressed in How It Works");
+    try {
+      await AsyncStorage.setItem("hasCompletedOnboarding", "skipped");
+      console.log("AsyncStorage set to skipped");
+      router.push("/(tabs)/home");
+      console.log("Navigation attempted to /(tabs)/home");
+    } catch (error) {
+      console.log("Skip error:", error);
+    }
   };
 
   return (

@@ -1,34 +1,46 @@
+// app/index.tsx
 import React, { useEffect } from "react";
 import { View, Text, Button, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "../supabase";
 
 export default function LandingPage() {
-  const handleGetStarted = async () => {
-    try {
+  useEffect(() => {
+    const checkStatus = async () => {
       const hasCompletedOnboarding = await AsyncStorage.getItem("hasCompletedOnboarding");
       const isSignedUp = await AsyncStorage.getItem("isSignedUp");
+      const { data: { session } } = await supabase.auth.getSession();
 
-      console.log("hasCompletedOnboarding:", hasCompletedOnboarding);
-      console.log("isSignedUp:", isSignedUp);
-
-      if (hasCompletedOnboarding === "completed" || isSignedUp === "true") {
-        console.log("Redirecting to home from landing");
-        router.replace("/home");
-      } else {
-        console.log("Redirecting to onboarding");
-        router.push("/onboarding/welcome"); // Use push instead of replace to allow back navigation
+      if (session) {
+        router.replace("/(tabs)/home");
+      } else if (isSignedUp === "true") {
+        router.replace("/login");
+      } else if (hasCompletedOnboarding === "completed") {
+        router.replace("/(tabs)/home");
       }
-    } catch (error) {
-      console.error("Error checking onboarding status:", error);
-      router.push("/onboarding/welcome"); // Fallback to onboarding
+    };
+    checkStatus();
+  }, []);
+
+  const handleGetStarted = async () => {
+    const hasCompletedOnboarding = await AsyncStorage.getItem("hasCompletedOnboarding");
+    const isSignedUp = await AsyncStorage.getItem("isSignedUp");
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (session) {
+      router.replace("/(tabs)/home");
+    } else if (isSignedUp === "true") {
+      router.replace("/login");
+    } else {
+      router.push("/onboarding/welcome");
     }
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Welcome to Tendrils YOUR Pickleball Ladder</Text>
-      <Text style={styles.tagline}>Join, Play, and Climb the Vine!</Text>
+      <Text style={styles.title}>Welcome to Pickleball Ladder</Text>
+      <Text style={styles.tagline}>Join, Play, and Climb the Ranks!</Text>
       <Button title="Get Started" onPress={handleGetStarted} />
     </View>
   );
