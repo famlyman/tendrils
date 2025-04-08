@@ -1,88 +1,132 @@
-import React from "react";
-import { View, Text, FlatList, StyleSheet } from "react-native";
+// app/(tabs)/home.tsx
+import React, { useEffect, useState } from "react";
+import { View, Text, FlatList, StyleSheet, ActivityIndicator } from "react-native";
+import { supabase } from "../../supabase";
 
-// Mock data for individual standings
-const individualStandings = [
-  { id: "1", name: "Alex", points: 30 },
-  { id: "2", name: "Brooke", points: 25 },
-  { id: "3", name: "Chris", points: 20 },
-  { id: "4", name: "Dana", points: 15 },
-];
-
-// Mock data for doubles standings (two-player teams)
-const doublesStandings = [
-  { id: "d1", players: ["Alex", "Brooke"], points: 55 },
-  { id: "d2", players: ["Chris", "Dana"], points: 35 },
-  { id: "d3", players: ["Evan", "Fiona"], points: 28 },
-];
-
-// Mock data for team standings (aggregating individual and doubles)
-const teamStandings = [
-  { id: "t1", name: "Team Aces", members: ["Alex", "Brooke", "Chris", "Dana"], points: 90 },
-  { id: "t2", name: "Team Smashers", members: ["Evan", "Fiona", "Greg", "Hannah"], points: 60 },
-];
+type StandingItem = {
+  key: string;
+  name?: string; // For individual/team
+  player1_name?: string; // For doubles
+  player2_name?: string; // For doubles
+  wins: number;
+  losses: number;
+  points: number; // points for individual/doubles, total_points for teams
+};
 
 export default function Home() {
-  const renderIndividualItem = ({ item, index }) => (
-    <View style={styles.ladderItem}>
-      <Text style={styles.ladderText}>
-        {index + 1}. {item.name} - {item.points} points
+  const [individualStandings, setIndividualStandings] = useState<StandingItem[]>([]);
+  const [doublesStandings, setDoublesStandings] = useState<StandingItem[]>([]);
+  const [teamStandings, setTeamStandings] = useState<StandingItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchStandings = async () => {
+      try {
+        // Fetch Individual Standings
+        const { data: individualData, error: individualError } = await supabase
+          .from("individual_standings")
+          .select("*");
+        if (individualError) throw individualError;
+        setIndividualStandings(individualData.map(item => ({
+          key: item.name,
+          name: item.name,
+          wins: item.wins,
+          losses: item.losses,
+          points: item.points,
+        })));
+
+        // Fetch Doubles Standings
+        const { data: doublesData, error: doublesError } = await supabase
+          .from("doubles_standings")
+          .select("*");
+        if (doublesError) throw doublesError;
+        setDoublesStandings(doublesData.map(item => ({
+          key: `${item.player1_name}-${item.player2_name}`,
+          player1_name: item.player1_name,
+          player2_name: item.player2_name,
+          wins: item.wins,
+          losses: item.losses,
+          points: item.points,
+        })));
+
+        // Fetch Team Standings
+        const { data: teamData, error: teamError } = await supabase
+          .from("team_standings")
+          .select("*");
+        if (teamError) throw teamError;
+        setTeamStandings(teamData.map(item => ({
+          key: item.team_name,
+          name: item.team_name,
+          wins: item.wins,
+          losses: item.losses,
+          points: item.total_points,
+        })));
+
+      } catch (err: any) {
+        console.log("Error fetching standings:", err);
+        setError("Failed to load standings. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchStandings();
+  }, []);
+
+  const renderItem = ({ item }: { item: StandingItem }) => (
+    <View style={styles.item}>
+      <Text>
+        {item.name 
+          ? `${item.name}` 
+          : `${item.player1_name} & ${item.player2_name}`} 
+        {" "}— W: {item.wins}, L: {item.losses}, Pts: {item.points}
       </Text>
     </View>
   );
 
-  const renderDoublesItem = ({ item, index }) => (
-    <View style={styles.ladderItem}>
-      <Text style={styles.ladderText}>
-        {index + 1}. {item.players[0]} & {item.players[1]} - {item.points} points
-      </Text>
-    </View>
-  );
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0000ff" />
+      </View>
+    );
+  }
 
-  const renderTeamItem = ({ item, index }) => (
-    <View style={styles.ladderItem}>
-      <Text style={styles.ladderText}>
-        {index + 1}. {item.name} - {item.points} points
-      </Text>
-    </View>
-  );
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.pageTitle}>Tendrils Standings</Text>
+      <Text style={styles.title}>Standings</Text>
 
-      {/* Individual Standings */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Individual Standings</Text>
-        <FlatList
-          data={individualStandings}
-          keyExtractor={(item) => item.id}
-          renderItem={renderIndividualItem}
-          scrollEnabled={false} // Disable scrolling for small lists (optional)
-        />
-      </View>
+      <Text style={styles.sectionTitle}>Individual</Text>
+      <FlatList
+        data={individualStandings}
+        keyExtractor={item => item.key}
+        renderItem={renderItem}
+        style={styles.list}
+      />
 
-      {/* Doubles Standings */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Doubles Standings</Text>
-        <FlatList
-          data={doublesStandings}
-          keyExtractor={(item) => item.id}
-          renderItem={renderDoublesItem}
-          scrollEnabled={false}
-        />
-      </View>
+      <Text style={styles.sectionTitle}>Doubles</Text>
+      <FlatList
+        data={doublesStandings}
+        keyExtractor={item => item.key}
+        renderItem={renderItem}
+        style={styles.list}
+      />
 
-      {/* Team Standings */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Team Standings</Text>
-        <FlatList
-          data={teamStandings}
-          keyExtractor={(item) => item.id}
-          renderItem={renderTeamItem}
-          scrollEnabled={false}
-        />
-      </View>
+      <Text style={styles.sectionTitle}>Teams</Text>
+      <FlatList
+        data={teamStandings}
+        keyExtractor={item => item.key}
+        renderItem={renderItem}
+        style={styles.list}
+      />
     </View>
   );
 }
@@ -93,27 +137,40 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: "#f5f5f5",
   },
-  pageTitle: {
+  title: {
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 20,
     textAlign: "center",
   },
-  section: {
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  list: {
     marginBottom: 20,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginBottom: 10,
-    color: "#333",
-  },
-  ladderItem: {
+  item: {
     padding: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
+    borderBottomColor: "#ccc",
   },
-  ladderText: {
-    fontSize: 18,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: "red",
+    textAlign: "center",
   },
 });

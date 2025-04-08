@@ -1,43 +1,80 @@
-import React from "react";
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from "react-native";
-import { router, useRootNavigationState } from "expo-router";
+// app/(tabs)/teams.tsx
+import React, { useEffect, useState } from "react";
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from "react-native";
+import { router } from "expo-router";
 import { supabase } from "../../supabase";
 
-
-const mockTeams = [
-  { id: "t1", name: "Team Aces", points: 90 },
-  { id: "t2", name: "Team Smashers", points: 60 },
-];
+type TeamItem = {
+  team_name: string;
+  wins: number;
+  losses: number;
+  total_points: number;
+};
 
 export default function Teams() {
-  const [session, setSession] = React.useState<any>(null);
+  const [teams, setTeams] = useState<TeamItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  React.useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+  useEffect(() => {
+    const fetchTeams = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("team_standings")
+          .select("team_name, wins, losses, total_points"); // No team_id
+        if (error) throw error;
+        setTeams(data);
+      } catch (err: any) {
+        console.log("Error fetching teams:", err);
+        setError("Failed to load teams. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTeams();
   }, []);
 
-  const renderTeamItem = ({ item }: { item: any }) => (
+  const handleTeamPress = async (teamName: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      router.push(`/team-details?teamName=${encodeURIComponent(teamName)}`);
+    } else {
+      Alert.alert("Please log in", "You need to be logged in to view team details.");
+    }
+  };
+
+  const renderItem = ({ item }: { item: TeamItem }) => (
     <TouchableOpacity
-      style={styles.teamItem}
-      onPress={() => {
-        if (session) {
-          router.push({ pathname: "/team-details", params: { teamId: item.id } });
-        } else {
-          alert("Please log in to view team details.");
-        }
-      }}
+      style={styles.item}
+      onPress={() => handleTeamPress(item.team_name)}
     >
-      <Text style={styles.teamText}>{item.name} - {item.points} points</Text>
+      <Text>{item.team_name} — W: {item.wins}, L: {item.losses}, Pts: {item.total_points}</Text>
     </TouchableOpacity>
   );
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0000ff" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Teams</Text>
       <FlatList
-        data={mockTeams}
-        keyExtractor={(item) => item.id}
-        renderItem={renderTeamItem}
+        data={teams}
+        keyExtractor={item => item.team_name}
+        renderItem={renderItem}
       />
     </View>
   );
@@ -53,13 +90,27 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 20,
+    textAlign: "center",
   },
-  teamItem: {
+  item: {
     padding: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
+    borderBottomColor: "#ccc",
   },
-  teamText: {
-    fontSize: 18,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: "red",
+    textAlign: "center",
   },
 });

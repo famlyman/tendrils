@@ -11,27 +11,26 @@ export default function LandingPage() {
       const hasCompletedOnboarding = await AsyncStorage.getItem("hasCompletedOnboarding");
       const isSignedUp = await AsyncStorage.getItem("isSignedUp");
       const { data: { session } } = await supabase.auth.getSession();
+      console.log("Landing - Session:", session);
+      console.log("Landing - hasCompletedOnboarding:", hasCompletedOnboarding);
+      console.log("Landing - isSignedUp:", isSignedUp);
 
       if (session) {
         router.replace("/(tabs)/home");
-      } else if (isSignedUp === "true") {
-        router.replace("/login");
-      } else if (hasCompletedOnboarding === "completed") {
-        router.replace("/(tabs)/home");
+      } else {
+        // Reset AsyncStorage if no session to avoid stale data
+        await AsyncStorage.clear();
+        console.log("AsyncStorage cleared due to no session");
       }
     };
     checkStatus();
   }, []);
 
   const handleGetStarted = async () => {
-    const hasCompletedOnboarding = await AsyncStorage.getItem("hasCompletedOnboarding");
-    const isSignedUp = await AsyncStorage.getItem("isSignedUp");
     const { data: { session } } = await supabase.auth.getSession();
 
     if (session) {
       router.replace("/(tabs)/home");
-    } else if (isSignedUp === "true") {
-      router.replace("/login");
     } else {
       router.push("/onboarding/welcome");
     }

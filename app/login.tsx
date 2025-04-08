@@ -9,15 +9,22 @@ export default function Login() {
   const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      Alert.alert("Error", error.message);
-    } else {
-      router.replace("/(tabs)/home");
+    console.log("Attempting login with:", { email, password });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) {
+        console.log("Login error:", error.message, error.code);
+        Alert.alert("Error", error.message);
+      } else {
+        console.log("Login success:", data);
+        router.replace("/(tabs)/home");
+      }
+    } catch (e) {
+      console.log("Login exception:", e);
+      Alert.alert("Error", "Failed to log in. Try again.");
     }
   };
 
