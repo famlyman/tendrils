@@ -6,9 +6,9 @@ import { supabase } from "../../supabase";
 
 type PlayerItem = {
   name: string;
-  wins: number;
-  losses: number;
-  points: number;
+  wins?: number;
+  losses?: number;
+  points?: number;
 };
 
 export default function Players() {
@@ -20,10 +20,21 @@ export default function Players() {
     const fetchPlayers = async () => {
       try {
         const { data, error } = await supabase
-          .from("individual_standings")
-          .select("name, wins, losses, points"); // No player_id
+          .from("players")
+          .select("name, individual_records(wins, losses, points)")
+          .order("name");
         if (error) throw error;
-        setPlayers(data);
+    
+        console.log("Raw players data:", data);
+        const formattedPlayers = data.map(player => ({
+          name: player.name,
+          wins: player.individual_records?.[0]?.wins ?? 0,
+          losses: player.individual_records?.[0]?.losses ?? 0,
+          points: player.individual_records?.[0]?.points ?? 0,
+        }));
+        console.log("Formatted players:", formattedPlayers);
+        setPlayers(formattedPlayers);
+        console.log("Players state set");
       } catch (err: any) {
         console.log("Error fetching players:", err);
         setError("Failed to load players. Please try again.");

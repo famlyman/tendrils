@@ -13,12 +13,20 @@ export default function TeamDetails() {
     const fetchTeamDetails = async () => {
       try {
         const { data, error } = await supabase
-          .from("team_standings")
-          .select("team_name, wins, losses, total_points")
+          .from("teams")
+          .select("team_name, captain_id, join_code, team_records(wins, losses, total_points)")
           .eq("team_name", decodeURIComponent(teamName as string))
           .single();
         if (error) throw error;
-        setTeam(data);
+
+        setTeam({
+          team_name: data.team_name,
+          captain_id: data.captain_id,
+          join_code: data.join_code,
+          wins: data.team_records?.[0]?.wins ?? 0,
+          losses: data.team_records?.[0]?.losses ?? 0,
+          total_points: data.team_records?.[0]?.total_points ?? 0,
+        });
       } catch (err) {
         console.log("Error fetching team details:", err);
       } finally {
@@ -50,6 +58,7 @@ export default function TeamDetails() {
       <Text>Wins: {team.wins}</Text>
       <Text>Losses: {team.losses}</Text>
       <Text>Total Points: {team.total_points}</Text>
+      <Text>Join Code: {team.join_code}</Text>
     </View>
   );
 }

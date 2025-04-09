@@ -1,16 +1,16 @@
-// app/(tabs)/home.tsx
+// app/(tabs)/home.tsx (Working with New Teams)
 import React, { useEffect, useState } from "react";
 import { View, Text, FlatList, StyleSheet, ActivityIndicator } from "react-native";
 import { supabase } from "../../supabase";
 
 type StandingItem = {
   key: string;
-  name?: string; // For individual/team
-  player1_name?: string; // For doubles
-  player2_name?: string; // For doubles
+  name?: string;
+  player1_name?: string;
+  player2_name?: string;
   wins: number;
   losses: number;
-  points: number; // points for individual/doubles, total_points for teams
+  points: number;
 };
 
 export default function Home() {
@@ -50,18 +50,33 @@ export default function Home() {
           points: item.points,
         })));
 
-        // Fetch Team Standings
-        const { data: teamData, error: teamError } = await supabase
+        // Fetch Teams and Standings
+        const { data: teamsData, error: teamsError } = await supabase
+          .from("teams")
+          .select("team_id, team_name")
+          .order("team_name");
+        if (teamsError) throw teamsError;
+
+        const { data: standingsData, error: standingsError } = await supabase
           .from("team_standings")
-          .select("*");
-        if (teamError) throw teamError;
-        setTeamStandings(teamData.map(item => ({
-          key: item.team_name,
-          name: item.team_name,
-          wins: item.wins,
-          losses: item.losses,
-          points: item.total_points,
-        })));
+          .select("team_name, wins, losses, total_points");
+        if (standingsError) throw standingsError;
+
+        const mergedStandings = teamsData.map(team => {
+          const standing = standingsData.find(s => s.team_name === team.team_name) || {
+            wins: 0,
+            losses: 0,
+            total_points: 0,
+          };
+          return {
+            key: team.team_name,
+            name: team.team_name,
+            wins: standing.wins,
+            losses: standing.losses,
+            points: standing.total_points,
+          };
+        });
+        setTeamStandings(mergedStandings);
 
       } catch (err: any) {
         console.log("Error fetching standings:", err);

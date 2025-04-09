@@ -22,21 +22,36 @@ export default function TeamCreation() {
       if (!user) throw new Error("No authenticated user");
 
       const joinCode = generateJoinCode();
-      const { error } = await supabase
+      // Insert team and get team_id
+      const { data: teamData, error: teamError } = await supabase
         .from("teams")
         .insert({
           team_name: teamName,
           captain_id: user.id,
           join_code: joinCode,
+        })
+        .select("team_id")
+        .single();
+      if (teamError) throw teamError;
+
+      // Insert initial standings
+      const { error: standingsError } = await supabase
+        .from("team_standings")
+        .insert({
+          team_id: teamData.team_id,
+          team_name: teamName,
+          wins: 0,
+          losses: 0,
+          total_points: 0,
         });
+      if (standingsError) throw standingsError;
 
-      if (error) throw error;
-
+      console.log("Team created with standings:", { team_id: teamData.team_id, team_name: teamName });
       Alert.alert("Success", `Team created! Join code: ${joinCode}`);
       router.replace("/(tabs)/home");
     } catch (err: any) {
       console.log("Error creating team:", err);
-      Alert.alert("Error", "Failed to create team. Try again.");
+      Alert.alert("Error", err.message || "Failed to create team. Try again.");
     }
   };
 

@@ -6,9 +6,9 @@ import { supabase } from "../../supabase";
 
 type TeamItem = {
   team_name: string;
-  wins: number;
-  losses: number;
-  total_points: number;
+  wins?: number;
+  losses?: number;
+  total_points?: number;
 };
 
 export default function Teams() {
@@ -20,10 +20,18 @@ export default function Teams() {
     const fetchTeams = async () => {
       try {
         const { data, error } = await supabase
-          .from("team_standings")
-          .select("team_name, wins, losses, total_points"); // No team_id
+          .from("teams")
+          .select("team_name, team_records(wins, losses, total_points)")
+          .order("team_name");
         if (error) throw error;
-        setTeams(data);
+
+        const formattedTeams = data.map(team => ({
+          team_name: team.team_name,
+          wins: team.team_records[0]?.wins ?? 0,
+          losses: team.team_records[0]?.losses ?? 0,
+          total_points: team.team_records[0]?.total_points ?? 0,
+        }));
+        setTeams(formattedTeams);
       } catch (err: any) {
         console.log("Error fetching teams:", err);
         setError("Failed to load teams. Please try again.");

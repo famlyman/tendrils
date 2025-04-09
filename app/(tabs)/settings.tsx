@@ -1,70 +1,248 @@
 // app/(tabs)/settings.tsx
 import React, { useEffect, useState } from "react";
-import { View, Text, Button, StyleSheet, Alert } from "react-native";
+import { View, Text, TextInput, Button, StyleSheet, Alert } from "react-native";
 import { router } from "expo-router";
-import { supabase } from "../../supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "../../supabase";
 
 export default function Settings() {
-  const [user, setUser] = useState<any>(null);
+  const [session, setSession] = useState<any>(null);
+  const [name, setName] = useState<string>("");
+  const [roles, setRoles] = useState<string[]>([]);
+  const [isPlayer, setIsPlayer] = useState(false);
+  const [bio, setBio] = useState<string>("");
+  const [contactInfo, setContactInfo] = useState<string>("");
+  const [teamInfo, setTeamInfo] = useState<string>("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log("Settings - Initial session:", session);
-      if (session) {
-        setUser(session.user);
-      } else {
-        setUser(null);
+    const fetchUserData = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session);
+
+        if (session) {
+          const { data: userData, error: userError } = await supabase.auth.getUser();
+          if (userError) throw userError;
+          const fullName = userData.user.user_metadata.full_name || "";
+          setName(fullName);
+
+          const { data: userRoleData, error: userRoleError } = await supabase
+            .from("user_roles")
+            .select("role_id")
+            .eq("user_id", session.user.id);
+          if (userRoleError) throw userRoleError;
+
+          let roleNames: string[] = [];
+          if (userRoleData && userRoleData.length > 0) {
+            const roleIds = userRoleData.map(item => item.role_id);
+            const { data: roleData, error: roleError } = await supabase
+              .from("roles")
+              .select("role_name")
+              .in("role_id", roleIds);
+            if (roleError) throw roleError;
+
+            roleNames = roleData.map(item => item.role_name);
+            setRoles(roleNames);
+            setIsPlayer(roleNames.includes("Player"));
+          } else {
+            setRoles([]);
+            setIsPlayer(false);
+          }
+
+          const { data: profileData, error: profileError } = await supabase
+            .from("profiles")
+            .select("bio, contact_info")
+            .eq("user_id", session.user.id)
+            .single();
+          if (!profileError && profileData) {
+            setBio(profileData.bio || "");
+            setContactInfo(profileData.contact_info || "");
+          }
+
+          if (!fullName) {
+            const { data: playerData, error: playerError } = await supabase
+              .from("players")
+              .select("name")
+              .eq("user_id", session.user.id)
+              .single();
+            if (!playerError && playerData) setName(playerData.name);
+          }
+
+          // Fetch team info
+          let teamText = "";
+          if (roleNames.includes("Captain")) {
+            const { data: captainTeam, error: captainError } = await supabase
+              .from("teams")
+              .select("team_name")
+              .eq("captain_id", session.user.id)
+              .single();
+            if (!captainError && captainTeam) {
+              teamText += `Captain of: ${captainTeam.team_name}`;
+            }
+          }
+          if (roleNames.includes("Player")) {
+            const { data: playerData, error: playerError } = await supabase
+              .from("players")
+              .select("player_id")
+              .eq("user_id", session.user.id)
+              .single();
+            if (!playerError && playerData) {
+              const { data: playerTeams, error: teamError } = await supabase
+                .from("team_players")
+                .select("teams(team_name)")
+                .eq("player_id", playerData.player_id);
+              if (!teamError && playerTeams?.length > 0) {
+                console.log("Raw playerTeams:", playerTeams); // Debug log
+                const teamNames = playerTeams
+                  .map((pt: { teams: { team_name: string }[] }) => pt.teams[0].team_name)
+                  .join(", ");
+                teamText += (teamText ? " | " : "") + `Plays for: ${teamNames}`;
+              }
+            }
+          }
+          setTeamInfo(teamText || "Not affiliated with any team");
+        }
+      } catch (err) {
+        console.log("Error fetching user data:", err);
+      } finally {
+        setLoading(false);
       }
     };
-    fetchUser();
+    fetchUserData();
   }, []);
 
   const handleLogout = async () => {
-    console.log("Attempting logout");
+    await supabase.auth.signOut();
+    await AsyncStorage.removeItem("isSignedUp");
+    router.replace("/login");
+  };
+
+  const handleRemovePlayerRole = async () => {
+    Alert.alert(
+      "Confirm",
+      "Are you sure you want to remove yourself as a Player?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          onPress: async () => {
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (!user) throw new Error("No user");
+
+              const { error: playerError } = await supabase
+                .from("players")
+                .delete()
+                .eq("user_id", user.id);
+              if (playerError) throw playerError;
+
+              const { error: roleError } = await supabase
+                .from("user_roles")
+                .delete()
+                .eq("user_id", user.id)
+                .eq("role_id", 1);
+              if (roleError) throw roleError;
+
+              setIsPlayer(false);
+              setRoles(roles.filter(role => role !== "Player"));
+              setTeamInfo(teamInfo.replace(/Plays for: .*$/, "").trim() || "Not affiliated with any team");
+              Alert.alert("Success", "Player role removed.");
+            } catch (err: any) {
+              console.log("Error removing player role:", err);
+              Alert.alert("Error", "Failed to remove Player role.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSaveProfile = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.log("Logout error:", error);
-        Alert.alert("Error", error.message);
-      } else {
-        console.log("Logout successful");
-        await AsyncStorage.removeItem("isSignedUp");
-        setUser(null);
-        router.replace("/login");
-        Alert.alert("Success", "You have been logged out.");
-        const { data: { session } } = await supabase.auth.getSession();
-        console.log("Session after logout:", session);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No user");
+
+      if (name !== user.user_metadata.full_name) {
+        const { error: authError } = await supabase.auth.updateUser({
+          data: { full_name: name },
+        });
+        if (authError) throw authError;
+
+        if (isPlayer) {
+          const { error: playerError } = await supabase
+            .from("players")
+            .update({ name })
+            .eq("user_id", user.id);
+          if (playerError) throw playerError;
+        }
       }
-    } catch (e) {
-      console.log("Logout exception:", e);
-      Alert.alert("Error", "Failed to log out. Try again.");
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert({
+          user_id: user.id,
+          bio,
+          contact_info: contactInfo,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id" });
+      if (profileError) throw profileError;
+
+      Alert.alert("Success", "Profile updated!");
+    } catch (err: any) {
+      console.log("Error saving profile:", err);
+      Alert.alert("Error", "Failed to save profile.");
     }
   };
 
-  const handleLogin = () => {
-    router.push("/login");
-  };
+  if (loading) {
+    return <View style={styles.loadingContainer}><Text>Loading...</Text></View>;
+  }
+
+  if (!session) {
+    return (
+      <View style={styles.container}>
+        <Text>Not logged in</Text>
+        <Button title="Log In" onPress={() => router.push("/login")} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Settings</Text>
-      {user ? (
-        <View style={styles.profileSection}>
-          <Text style={styles.label}>Email: {user.email}</Text>
-          <Text style={styles.label}>Stats (Placeholder):</Text>
-          <Text>Matches Played: 0</Text>
-          <Text>Wins: 0</Text>
-          <Text>Losses: 0</Text>
-          <Button title="Log Out" onPress={handleLogout} color="#ff4444" />
-        </View>
-      ) : (
-        <View style={styles.notLoggedIn}>
-          <Text style={styles.label}>Not logged in</Text>
-          <Button title="Log In" onPress={handleLogin} />
-        </View>
+      <Text style={styles.label}>Email: {session.user.email}</Text>
+      <Text style={styles.label}>Name:</Text>
+      <TextInput
+        style={styles.input}
+        value={name}
+        onChangeText={setName}
+        placeholder="Enter your name"
+        autoCapitalize="words"
+      />
+      <Text style={styles.label}>Roles: {roles.join(", ") || "None"}</Text>
+      <Text style={styles.label}>Team: {teamInfo}</Text>
+      
+      <Text style={styles.label}>Bio:</Text>
+      <TextInput
+        style={styles.input}
+        value={bio}
+        onChangeText={setBio}
+        placeholder="Tell others about yourself"
+        multiline
+      />
+      <Text style={styles.label}>Contact Info:</Text>
+      <TextInput
+        style={styles.input}
+        value={contactInfo}
+        onChangeText={setContactInfo}
+        placeholder="e.g., phone or social handle"
+      />
+      <Button title="Save Profile" onPress={handleSaveProfile} />
+      {isPlayer && (roles.includes("Captain") || roles.includes("Coordinator")) && (
+        <Button title="Remove Player Role" onPress={handleRemovePlayerRole} color="red" />
       )}
+      <Button title="Log Out" onPress={handleLogout} />
     </View>
   );
 }
@@ -81,14 +259,23 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: "center",
   },
-  profileSection: {
-    marginBottom: 20,
-  },
-  notLoggedIn: {
-    alignItems: "center",
-  },
   label: {
-    fontSize: 18,
-    marginBottom: 10,
+    fontSize: 16,
+    marginBottom: 5,
+  },
+  input: {
+    width: "100%",
+    height: 40,
+    borderColor: "#ccc",
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    marginBottom: 15,
+    backgroundColor: "#fff",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
