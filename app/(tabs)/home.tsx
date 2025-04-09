@@ -1,7 +1,8 @@
 // app/(tabs)/home.tsx (Working with New Teams)
 import React, { useEffect, useState } from "react";
-import { View, Text, FlatList, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native";
 import { supabase } from "../../supabase";
+import { router } from "expo-router";
 
 type StandingItem = {
   key: string;
@@ -89,15 +90,19 @@ export default function Home() {
   }, []);
 
   const renderItem = ({ item }: { item: StandingItem }) => (
-    <View style={styles.item}>
+    <TouchableOpacity
+      style={styles.item}
+      onPress={() => router.push(`/team-details?teamName=${encodeURIComponent(item.name || "")}`)}
+    >
       <Text>
         {item.name 
           ? `${item.name}` 
           : `${item.player1_name} & ${item.player2_name}`} 
         {" "}— W: {item.wins}, L: {item.losses}, Pts: {item.points}
       </Text>
-    </View>
+    </TouchableOpacity>
   );
+  
 
   if (loading) {
     return (

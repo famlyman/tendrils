@@ -1,4 +1,3 @@
-// app/(tabs)/settings.tsx
 import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, Button, StyleSheet, Alert } from "react-native";
 import { router } from "expo-router";
@@ -13,6 +12,7 @@ export default function Settings() {
   const [bio, setBio] = useState<string>("");
   const [contactInfo, setContactInfo] = useState<string>("");
   const [teamInfo, setTeamInfo] = useState<string>("");
+  const [joinCode, setJoinCode] = useState<string>(""); // New state for join_code
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -69,16 +69,17 @@ export default function Settings() {
             if (!playerError && playerData) setName(playerData.name);
           }
 
-          // Fetch team info
+          // Fetch team info and join_code
           let teamText = "";
           if (roleNames.includes("Captain")) {
             const { data: captainTeam, error: captainError } = await supabase
               .from("teams")
-              .select("team_name")
+              .select("team_name, join_code") // Added join_code
               .eq("captain_id", session.user.id)
               .single();
             if (!captainError && captainTeam) {
               teamText += `Captain of: ${captainTeam.team_name}`;
+              setJoinCode(captainTeam.join_code); // Set join_code
             }
           }
           if (roleNames.includes("Player")) {
@@ -93,7 +94,7 @@ export default function Settings() {
                 .select("teams(team_name)")
                 .eq("player_id", playerData.player_id);
               if (!teamError && playerTeams?.length > 0) {
-                console.log("Raw playerTeams:", playerTeams); // Debug log
+                console.log("Raw playerTeams:", playerTeams);
                 const teamNames = playerTeams
                   .map((pt: { teams: { team_name: string }[] }) => pt.teams[0].team_name)
                   .join(", ");
@@ -222,6 +223,9 @@ export default function Settings() {
       />
       <Text style={styles.label}>Roles: {roles.join(", ") || "None"}</Text>
       <Text style={styles.label}>Team: {teamInfo}</Text>
+      {joinCode && (
+        <Text style={styles.label}>Join Code: {joinCode} (Share this with players!)</Text>
+      )}
       
       <Text style={styles.label}>Bio:</Text>
       <TextInput
