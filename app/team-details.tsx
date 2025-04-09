@@ -66,64 +66,64 @@ export default function TeamDetails() {
       Alert.alert("Error", "Please enter the join code.");
       return;
     }
-
+  
     if (!team) {
       Alert.alert("Error", "Team details not loaded yet.");
       return;
     }
-
+  
     if (joinCode.toUpperCase() !== team.join_code) {
       Alert.alert("Error", "Incorrect join code. Please try again.");
       return;
     }
-
+  
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) throw new Error("No authenticated user");
-
+  
       const { data: existingMembership, error: membershipError } = await supabase
         .from("team_players")
         .select("player_id")
         .eq("team_id", team.team_id)
         .eq("player_id", user.id);
       if (membershipError) throw membershipError;
-
+  
       if (existingMembership.length > 0) {
         Alert.alert("Info", "You’re already on this team!");
         router.replace("/(tabs)/home");
         return;
       }
-
-      // Register player if not in players table
+  
+      // Only insert into players if not already there
       const { data: playerCheck, error: playerCheckError } = await supabase
         .from("players")
         .select("user_id")
         .eq("user_id", user.id)
         .single();
       if (playerCheckError && playerCheckError.code !== "PGRST116") throw playerCheckError;
-
+  
       if (!playerCheck) {
         const { error: playerInsertError } = await supabase
           .from("players")
           .insert({
             user_id: user.id,
             name: user.user_metadata.full_name || "Unnamed Player",
+            auth_linked: true, // Match join-now.tsx
           });
         if (playerInsertError) throw playerInsertError;
       }
-
-      const { data: joinData, error: joinError } = await supabase
+  
+      const { error: joinError } = await supabase
         .from("team_players")
         .insert({
           team_id: team.team_id,
           player_id: user.id,
-        })
-        .select();
+        });
       if (joinError) throw joinError;
-
+  
       Alert.alert("Success", `Joined team: ${team.team_name}`);
-      fetchTeamDetails(); // Refresh data
-
+      fetchTeamDetails();
+  
     } catch (err: any) {
       console.log("Error joining team:", err);
       Alert.alert("Error", err.message || "Failed to join team. Try again.");

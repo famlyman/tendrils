@@ -12,7 +12,7 @@ export default function Settings() {
   const [bio, setBio] = useState<string>("");
   const [contactInfo, setContactInfo] = useState<string>("");
   const [teamInfo, setTeamInfo] = useState<string>("");
-  const [joinCode, setJoinCode] = useState<string>(""); // New state for join_code
+  const [joinCode, setJoinCode] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -69,38 +69,35 @@ export default function Settings() {
             if (!playerError && playerData) setName(playerData.name);
           }
 
-          // Fetch team info and join_code
           let teamText = "";
           if (roleNames.includes("Captain")) {
             const { data: captainTeam, error: captainError } = await supabase
               .from("teams")
-              .select("team_name, join_code") // Added join_code
+              .select("team_name, join_code")
               .eq("captain_id", session.user.id)
               .single();
             if (!captainError && captainTeam) {
               teamText += `Captain of: ${captainTeam.team_name}`;
-              setJoinCode(captainTeam.join_code); // Set join_code
+              setJoinCode(captainTeam.join_code);
             }
           }
-          if (roleNames.includes("Player")) {
-            const { data: playerData, error: playerError } = await supabase
-              .from("players")
-              .select("player_id")
-              .eq("user_id", session.user.id)
-              .single();
-            if (!playerError && playerData) {
-              const { data: playerTeams, error: teamError } = await supabase
-                .from("team_players")
-                .select("teams(team_name)")
-                .eq("player_id", playerData.player_id);
-              if (!teamError && playerTeams?.length > 0) {
-                console.log("Raw playerTeams:", playerTeams);
-                const teamNames = playerTeams
-                  .map((pt: { teams: { team_name: string }[] }) => pt.teams[0].team_name)
-                  .join(", ");
-                teamText += (teamText ? " | " : "") + `Plays for: ${teamNames}`;
-              }
+          const { data: playerData, error: playerError } = await supabase
+            .from("players")
+            .select("player_id")
+            .eq("user_id", session.user.id)
+            .single();
+          if (!playerError && playerData) {
+            const { data: playerTeams, error: teamError } = await supabase
+              .from("team_players")
+              .select("teams(team_name)")
+              .eq("player_id", playerData.player_id);
+            if (!teamError && playerTeams?.length > 0) {
+              const teamNames = playerTeams
+                .map((pt: { teams: { team_name: string }[] }) => pt.teams[0].team_name)
+                .join(", ");
+              teamText += (teamText ? " | " : "") + `Plays for: ${teamNames}`;
             }
+            setIsPlayer(true);
           }
           setTeamInfo(teamText || "Not affiliated with any team");
         }
@@ -143,7 +140,7 @@ export default function Settings() {
                 .delete()
                 .eq("user_id", user.id)
                 .eq("role_id", 1);
-              if (roleError) throw roleError;
+              if (roleError && roleError.code !== "PGRST116") throw roleError;
 
               setIsPlayer(false);
               setRoles(roles.filter(role => role !== "Player"));
@@ -226,7 +223,6 @@ export default function Settings() {
       {joinCode && (
         <Text style={styles.label}>Join Code: {joinCode} (Share this with players!)</Text>
       )}
-      
       <Text style={styles.label}>Bio:</Text>
       <TextInput
         style={styles.input}
@@ -243,7 +239,7 @@ export default function Settings() {
         placeholder="e.g., phone or social handle"
       />
       <Button title="Save Profile" onPress={handleSaveProfile} />
-      {isPlayer && (roles.includes("Captain") || roles.includes("Coordinator")) && (
+      {isPlayer && (
         <Button title="Remove Player Role" onPress={handleRemovePlayerRole} color="red" />
       )}
       <Button title="Log Out" onPress={handleLogout} />
