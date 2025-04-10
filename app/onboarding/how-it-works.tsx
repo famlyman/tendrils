@@ -1,6 +1,5 @@
-// app/onboarding/how-it-works.tsx
-import React from "react";
-import { View, Text, StyleSheet, StatusBar, Image } from "react-native";
+import React, { useRef } from "react";
+import { View, Text, StyleSheet, StatusBar, Image, ScrollView } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Button, Icon } from "react-native-elements";
 import { router } from "expo-router";
@@ -8,6 +7,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Animatable from "react-native-animatable";
 
 export default function HowItWorks() {
+  // Create a ref for the animatable view
+  const buttonAnimationRef = useRef(null);
+
   const handleSkip = async () => {
     console.log("Skip pressed in How It Works");
     try {
@@ -20,67 +22,118 @@ export default function HowItWorks() {
     }
   };
 
+  const handleButtonPress = () => {
+    // Animate the button when pressed
+    if (buttonAnimationRef.current) {
+      buttonAnimationRef.current.bounce(800);
+    }
+    router.push("/onboarding/join-now");
+  };
+
   return (
     <LinearGradient
       colors={["#A8E6CF", "#4A704A"]}
       style={styles.container}
     >
       <StatusBar barStyle="light-content" backgroundColor="#4A704A" />
-      <View style={styles.content}>
-        <Animatable.View animation="fadeIn" duration={1000}>
-          <Image
-            source={require("../../assets/images/pickleball.png")}
-            style={styles.icon}
-          />
-          <Text style={styles.title}>How It Works</Text>
-          <View style={styles.descriptionContainer}>
-            <Icon
-              name="tennis-ball"
-              type="material-community"
-              color="#FFD700"
-              size={24}
-              containerStyle={styles.illustration}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.content}>
+          <Animatable.View animation="fadeIn" duration={1000}>
+            <Image
+              source={require("../../assets/images/pickleball.png")}
+              style={styles.icon}
             />
-            <Text style={styles.description}>Play matches, earn points, and climb the ladder!</Text>
-          </View>
-        </Animatable.View>
-        <View style={styles.buttonContainer}>
-          <Animatable.View animation="fadeInUp" duration={1000} delay={300}>
-            <Button
-              title="Next"
-              onPress={() => router.push("/onboarding/join-now")}
-              buttonStyle={styles.nextButton}
-              titleStyle={styles.buttonText}
-              containerStyle={styles.buttonWrapper}
-              ViewComponent={LinearGradient}
-              linearGradientProps={{
-                colors: ["#FFD700", "#FFC107"],
-                start: { x: 0, y: 0 },
-                end: { x: 1, y: 0 },
-              }}
-              onPressIn={() => {
-                const buttonRef = this.button as any;
-                buttonRef?.bounce(800);
-              }}
-            />
+            <Text style={styles.title}>The Climb Awaits</Text>
+            <Text style={styles.tagline}>Your Path to Pickleball Greatness</Text>
+            
+            <Animatable.View animation="fadeInLeft" delay={300} duration={800} style={styles.stepContainer}>
+              <Icon
+                name="numeric-1-circle"
+                type="material-community"
+                color="#FFD700"
+                size={28}
+                containerStyle={styles.illustration}
+              />
+              <View style={styles.stepTextContainer}>
+                <Text style={styles.stepTitle}>COMPETE</Text>
+                <Text style={styles.stepDescription}>
+                  Challenge opponents and record your thrilling matches
+                </Text>
+              </View>
+            </Animatable.View>
+            
+            <Animatable.View animation="fadeInLeft" delay={500} duration={800} style={styles.stepContainer}>
+              <Icon
+                name="numeric-2-circle"
+                type="material-community"
+                color="#FFD700"
+                size={28}
+                containerStyle={styles.illustration}
+              />
+              <View style={styles.stepTextContainer}>
+                <Text style={styles.stepTitle}>SCORE</Text>
+                <Text style={styles.stepDescription}>
+                  Earn points with each victory as you showcase your skills
+                </Text>
+              </View>
+            </Animatable.View>
+            
+            <Animatable.View animation="fadeInLeft" delay={700} duration={800} style={styles.stepContainer}>
+              <Icon
+                name="numeric-3-circle"
+                type="material-community"
+                color="#FFD700"
+                size={28}
+                containerStyle={styles.illustration}
+              />
+              <View style={styles.stepTextContainer}>
+                <Text style={styles.stepTitle}>CONQUER</Text>
+                <Text style={styles.stepDescription}>
+                  Rise through the ranks and establish your dominance
+                </Text>
+              </View>
+            </Animatable.View>
           </Animatable.View>
-          <Animatable.Text
-            animation="fadeIn"
-            duration={1000}
-            delay={600}
-            style={styles.skipText}
-            onPress={handleSkip}
-          >
-            Skip
-          </Animatable.Text>
-          {/* Progress Dots */}
-          <View style={styles.progressDots}>
-            <View style={styles.dot} />
-            <View style={[styles.dot, styles.activeDot]} />
-            <View style={styles.dot} />
+          
+          <View style={styles.buttonContainer}>
+            <Animatable.View 
+              animation="fadeInUp" 
+              duration={1000} 
+              delay={900}
+              ref={buttonAnimationRef}
+            >
+              <Button
+                title="Ready to Dominate"
+                onPress={handleButtonPress}
+                buttonStyle={styles.nextButton}
+                titleStyle={styles.buttonText}
+                containerStyle={styles.buttonWrapper}
+                ViewComponent={LinearGradient}
+                linearGradientProps={{
+                  colors: ["#FFD700", "#FFC107"],
+                  start: { x: 0, y: 0 },
+                  end: { x: 1, y: 0 },
+                }}
+              />
+            </Animatable.View>
+            <Animatable.Text
+              animation="fadeIn"
+              duration={1000}
+              delay={1100}
+              style={styles.skipText}
+              onPress={handleSkip}
+            >
+              Skip
+            </Animatable.Text>
+            {/* Progress Dots */}
+            <View style={styles.progressDots}>
+              <View style={styles.dot} />
+              <View style={[styles.dot, styles.activeDot]} />
+              <View style={styles.dot} />
+            </View>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -88,8 +141,9 @@ export default function HowItWorks() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
     flex: 1,
@@ -105,21 +159,52 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   title: {
-    fontSize: 36,
+    fontSize: 42,
     fontFamily: "AmaticSC-Bold",
-    color: "#FFFFFF",
+    color: "#1A3C34",
     textAlign: "center",
     textShadowColor: "rgba(0, 0, 0, 0.4)",
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 6,
   },
+  tagline: {
+    fontSize: 18,
+    fontFamily: "Roboto-Bold",
+    color: "#FFD700",
+    textAlign: "center",
+    marginBottom: 30,
+  },
+  stepContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 25,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 12,
+    padding: 15,
+    width: "100%",
+  },
+  illustration: {
+    marginRight: 15,
+  },
+  stepTextContainer: {
+    flex: 1,
+  },
+  stepTitle: {
+    fontSize: 16,
+    fontFamily: "Roboto-Bold",
+    color: "#FFFFFF",
+    marginBottom: 5,
+  },
+  stepDescription: {
+    fontSize: 14,
+    fontFamily: "Roboto-Regular",
+    color: "#FFFFFF",
+    lineHeight: 20,
+  },
   descriptionContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-  },
-  illustration: {
-    marginRight: 10,
   },
   description: {
     fontSize: 18,
@@ -132,6 +217,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     alignItems: "center",
     marginBottom: 20,
+    marginTop: 20,
   },
   buttonWrapper: {
     borderRadius: 25,

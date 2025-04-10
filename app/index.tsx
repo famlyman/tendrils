@@ -66,18 +66,27 @@ export default function LandingPage() {
           style={styles.icon}
         />
 
-        {/* Header */}
-        <Text style={styles.title}>Tendrils</Text>
-        <Text style={styles.tagline}>Pickleball Ladder Management</Text>
-        <Text style={styles.subline}>Put your skills to the test to climb the Vine</Text>
+        {/* Updated Header */}
+        <Text style={styles.title}>TENDRILS</Text>
+        <Text style={styles.tagline}>The Ultimate Pickleball Ladder Experience</Text>
+        <Animatable.Text 
+          animation="fadeIn" 
+          duration={1500} 
+          style={styles.callToAction}
+        >
+          CLIMB THE VINE. CLAIM YOUR GLORY.
+        </Animatable.Text>
 
-        {/* Footer */}
+        {/* Updated Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Whether player, captain, or ladder coordinator, we have the solution
+            From casual players to competitive captains, Tendrils transforms your pickleball passion into organized competition that grows with your skills.
+          </Text>
+          <Text style={[styles.footerText, styles.communityText]}>
+            JOIN THE FASTEST-GROWING PICKLEBALL COMMUNITY
           </Text>
           <Animatable.View
-            animation="fadeInUp" // Subtle one-time animation
+            animation="fadeInUp"
             duration={1000}
             style={styles.buttonWrapper}
           >
@@ -130,38 +139,47 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 60,
     fontFamily: "AmaticSC-Bold",
-    color: "#FFFFFF",
+    color: "#1A3C34",
     textAlign: "center",
     textShadowColor: "rgba(0, 0, 0, 0.4)",
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 6,
   },
   tagline: {
-    fontSize: 24,
+    fontSize: 22,
     fontFamily: "Roboto-Regular",
     color: "#FFFFFF",
     textAlign: "center",
     marginTop: 10,
   },
-  subline: {
-    fontSize: 18,
-    fontFamily: "Roboto-Regular",
+  callToAction: {
+    fontSize: 24,
+    fontFamily: "Roboto-Bold",
     color: "#FFFFFF",
     textAlign: "center",
     marginTop: 15,
-    maxWidth: "80%",
+    maxWidth: "85%",
+    textShadowColor: "rgba(0, 0, 0, 0.3)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   footer: {
     alignItems: "center",
-    marginBottom: 20, // Reduced to make space for attribution
+    marginBottom: 20,
   },
   footerText: {
     fontSize: 16,
     fontFamily: "Roboto-Regular",
     color: "#FFFFFF",
     textAlign: "center",
-    marginBottom: 25,
+    marginBottom: 20,
     maxWidth: "90%",
+  },
+  communityText: {
+    fontFamily: "Roboto-Bold",
+    fontSize: 18,
+    marginBottom: 25,
+    color: "#FFD700", // Gold color to make it stand out
   },
   buttonWrapper: {
     borderRadius: 25,

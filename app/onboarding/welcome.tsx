@@ -1,5 +1,4 @@
-// app/onboarding/welcome.tsx
-import React from "react";
+import React, { useRef } from "react";
 import { View, Text, StyleSheet, StatusBar, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Button, Icon } from "react-native-elements";
@@ -8,6 +7,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Animatable from "react-native-animatable";
 
 export default function Welcome() {
+  // Create a ref for the animatable view
+  const buttonAnimationRef = useRef(null);
+
   const handleSkip = async () => {
     console.log("Skip pressed in Welcome");
     try {
@@ -18,6 +20,14 @@ export default function Welcome() {
     } catch (error) {
       console.log("Skip error:", error);
     }
+  };
+
+  const handleButtonPress = () => {
+    // Animate the button when pressed
+    if (buttonAnimationRef.current) {
+      buttonAnimationRef.current.bounce(800);
+    }
+    router.push("/onboarding/how-it-works");
   };
 
   return (
@@ -32,7 +42,8 @@ export default function Welcome() {
             source={require("../../assets/images/pickleball.png")}
             style={styles.icon}
           />
-          <Text style={styles.title}>Welcome!</Text>
+          <Text style={styles.title}>Game On!</Text>
+          <Text style={styles.subtitle}>Your Pickleball Journey Starts Here</Text>
           <View style={styles.descriptionContainer}>
             <Icon
               name="sprout"
@@ -41,14 +52,32 @@ export default function Welcome() {
               size={24}
               containerStyle={styles.illustration}
             />
-            <Text style={styles.description}>Get ready to join the pickleball fun.</Text>
+            <Text style={styles.description}>
+              Join a thriving community where every match brings you closer to the top.
+            </Text>
+          </View>
+          <View style={styles.featureContainer}>
+            <Text style={styles.featureText}>
+              • Track your progress in real-time
+            </Text>
+            <Text style={styles.featureText}>
+              • Challenge players at your skill level
+            </Text>
+            <Text style={styles.featureText}>
+              • Build your reputation on the courts
+            </Text>
           </View>
         </Animatable.View>
         <View style={styles.buttonContainer}>
-          <Animatable.View animation="fadeInUp" duration={1000} delay={300}>
+          <Animatable.View 
+            animation="fadeInUp" 
+            duration={1000} 
+            delay={300}
+            ref={buttonAnimationRef}
+          >
             <Button
-              title="Next"
-              onPress={() => router.push("/onboarding/how-it-works")}
+              title="Let's Go!"
+              onPress={handleButtonPress}
               buttonStyle={styles.nextButton}
               titleStyle={styles.buttonText}
               containerStyle={styles.buttonWrapper}
@@ -57,10 +86,6 @@ export default function Welcome() {
                 colors: ["#FFD700", "#FFC107"],
                 start: { x: 0, y: 0 },
                 end: { x: 1, y: 0 },
-              }}
-              onPressIn={() => {
-                const buttonRef = this.button as any;
-                buttonRef?.bounce(800);
               }}
             />
           </Animatable.View>
@@ -105,29 +130,47 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   title: {
-    fontSize: 36,
+    fontSize: 42,
     fontFamily: "AmaticSC-Bold",
-    color: "#FFFFFF",
+    color: "#1A3C34",
     textAlign: "center",
     textShadowColor: "rgba(0, 0, 0, 0.4)",
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 6,
   },
+  subtitle: {
+    fontSize: 18,
+    fontFamily: "Roboto-Bold",
+    color: "#FFD700",
+    textAlign: "center",
+    marginBottom: 15,
+  },
   descriptionContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 15,
   },
   illustration: {
     marginRight: 10,
   },
   description: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: "Roboto-Regular",
     color: "#FFFFFF",
-    textAlign: "center",
-    marginTop: 10,
-    marginBottom: 20,
+    textAlign: "left",
+    flex: 1,
+  },
+  featureContainer: {
+    alignItems: "flex-start",
+    alignSelf: "center",
+    marginVertical: 10,
+  },
+  featureText: {
+    fontSize: 15,
+    fontFamily: "Roboto-Regular",
+    color: "#FFFFFF",
+    marginVertical: 5,
   },
   buttonContainer: {
     alignItems: "center",

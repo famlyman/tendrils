@@ -1,5 +1,5 @@
 // app/onboarding/join-now.tsx
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { View, Text, TextInput, StyleSheet, StatusBar, Image, Alert, TouchableOpacity, ScrollView } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Button, Icon } from "react-native-elements";
@@ -15,19 +15,29 @@ export default function JoinNow() {
   const [phone, setPhone] = useState("");
   const [rating, setRating] = useState("");
   const [roles, setRoles] = useState({ Captain: false, Coordinator: false });
+  
+  // Create ref for button animation
+  const buttonAnimationRef = useRef(null);
 
   const handleRoleChange = (role: keyof typeof roles) => {
     setRoles(prev => ({ ...prev, [role]: !prev[role] }));
   };
 
   const setStorageItem = async (key: string, value: string) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(key, value);
-      console.log(`Set ${key} in localStorage`);
-    } else {
+    try {
       await AsyncStorage.setItem(key, value);
       console.log(`Set ${key} in AsyncStorage`);
+    } catch (error) {
+      console.error(`Error setting ${key} in AsyncStorage:`, error);
     }
+  };
+
+  const handleButtonPress = () => {
+    // Animate the button when pressed
+    if (buttonAnimationRef.current) {
+      buttonAnimationRef.current.bounce(800);
+    }
+    handleJoin();
   };
 
   const handleJoin = async () => {
@@ -86,26 +96,11 @@ export default function JoinNow() {
 
       await setStorageItem("isSignedUp", "true");
       await setStorageItem("hasCompletedOnboarding", "completed");
+      await setStorageItem("playerId", player.player_id.toString());
 
-      if (roles.Captain) {
-        console.log("Redirecting to team-creation");
-        if (typeof window !== "undefined") {
-          console.log("Using window.location for web");
-          window.location.href = "/team-creation";
-        } else {
-          console.log("Using router.push for native");
-          router.push("/team-creation");
-        }
-      } else {
-        console.log("Redirecting to home");
-        if (typeof window !== "undefined") {
-          console.log("Using window.location for web");
-          window.location.href = "/(tabs)/home";
-        } else {
-          console.log("Using router.replace for native");
-          router.replace("/(tabs)/home");
-        }
-      }
+      // Redirect to profile setup instead of home
+      console.log("Redirecting to profile-setup");
+      router.push("/profile-setup");
     } catch (e: any) {
       console.log("Signup failed:", e.message);
       Alert.alert("Error", e.message || "Failed to sign up. Try again.");
@@ -194,23 +189,23 @@ export default function JoinNow() {
                 <Text style={styles.checkboxLabel}>Coordinator</Text>
               </TouchableOpacity>
             </View>
-            <Button
-              title="Join Now"
-              onPress={handleJoin}
-              buttonStyle={styles.signUpButton}
-              titleStyle={styles.buttonText}
-              containerStyle={styles.buttonWrapper}
-              ViewComponent={LinearGradient}
-              linearGradientProps={{
-                colors: ["#FFD700", "#FFC107"],
-                start: { x: 0, y: 0 },
-                end: { x: 1, y: 0 },
-              }}
-              onPressIn={() => {
-                const buttonRef = this.button as any;
-                buttonRef?.bounce(800);
-              }}
-            />
+            <Animatable.View 
+              ref={buttonAnimationRef}
+            >
+              <Button
+                title="Join Now"
+                onPress={handleButtonPress}
+                buttonStyle={styles.signUpButton}
+                titleStyle={styles.buttonText}
+                containerStyle={styles.buttonWrapper}
+                ViewComponent={LinearGradient}
+                linearGradientProps={{
+                  colors: ["#FFD700", "#FFC107"],
+                  start: { x: 0, y: 0 },
+                  end: { x: 1, y: 0 },
+                }}
+              />
+            </Animatable.View>
             {/* Progress Dots */}
             <View style={styles.progressDots}>
               <View style={styles.dot} />
@@ -249,7 +244,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 36,
     fontFamily: "AmaticSC-Bold",
-    color: "#FFFFFF",
+    color: "#1A3C34",
     textAlign: "center",
     textShadowColor: "rgba(0, 0, 0, 0.4)",
     textShadowOffset: { width: 2, height: 2 },

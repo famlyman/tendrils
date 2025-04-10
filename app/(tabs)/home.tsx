@@ -1,8 +1,10 @@
-// app/(tabs)/home.tsx (Working with New Teams)
+// app/(tabs)/home.tsx
 import React, { useEffect, useState } from "react";
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native";
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, StatusBar, Image } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../../supabase";
 import { router } from "expo-router";
+import * as Animatable from "react-native-animatable";
 
 type StandingItem = {
   key: string;
@@ -24,7 +26,6 @@ export default function Home() {
   useEffect(() => {
     const fetchStandings = async () => {
       try {
-        // Fetch Individual Standings
         const { data: individualData, error: individualError } = await supabase
           .from("individual_standings")
           .select("*");
@@ -37,7 +38,6 @@ export default function Home() {
           points: item.points,
         })));
 
-        // Fetch Doubles Standings
         const { data: doublesData, error: doublesError } = await supabase
           .from("doubles_standings")
           .select("*");
@@ -51,7 +51,6 @@ export default function Home() {
           points: item.points,
         })));
 
-        // Fetch Teams and Standings
         const { data: teamsData, error: teamsError } = await supabase
           .from("teams")
           .select("team_id, team_name")
@@ -78,7 +77,6 @@ export default function Home() {
           };
         });
         setTeamStandings(mergedStandings);
-
       } catch (err: any) {
         console.log("Error fetching standings:", err);
         setError("Failed to load standings. Please try again.");
@@ -94,7 +92,7 @@ export default function Home() {
       style={styles.item}
       onPress={() => router.push(`/team-details?teamName=${encodeURIComponent(item.name || "")}`)}
     >
-      <Text>
+      <Text style={styles.itemText}>
         {item.name 
           ? `${item.name}` 
           : `${item.player1_name} & ${item.player2_name}`} 
@@ -102,80 +100,109 @@ export default function Home() {
       </Text>
     </TouchableOpacity>
   );
-  
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0000ff" />
-      </View>
+      <LinearGradient colors={["#A8E6CF", "#4A704A"]} style={styles.loadingContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#4A704A" />
+        <ActivityIndicator size="large" color="#FFD700" />
+      </LinearGradient>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.errorContainer}>
+      <LinearGradient colors={["#A8E6CF", "#4A704A"]} style={styles.errorContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#4A704A" />
         <Text style={styles.errorText}>{error}</Text>
-      </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Standings</Text>
+    <LinearGradient colors={["#A8E6CF", "#4A704A"]} style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#4A704A" />
+      <Animatable.View animation="fadeIn" duration={1000} style={styles.content}>
+        <Image source={require("../../assets/images/pickleball.png")} style={styles.icon} />
+        <Text style={styles.title}>Standings</Text>
 
-      <Text style={styles.sectionTitle}>Individual</Text>
-      <FlatList
-        data={individualStandings}
-        keyExtractor={item => item.key}
-        renderItem={renderItem}
-        style={styles.list}
-      />
+        <Text style={styles.sectionTitle}>Individual</Text>
+        <FlatList
+          data={individualStandings}
+          keyExtractor={item => item.key}
+          renderItem={renderItem}
+          style={styles.list}
+        />
 
-      <Text style={styles.sectionTitle}>Doubles</Text>
-      <FlatList
-        data={doublesStandings}
-        keyExtractor={item => item.key}
-        renderItem={renderItem}
-        style={styles.list}
-      />
+        <Text style={styles.sectionTitle}>Doubles</Text>
+        <FlatList
+          data={doublesStandings}
+          keyExtractor={item => item.key}
+          renderItem={renderItem}
+          style={styles.list}
+        />
 
-      <Text style={styles.sectionTitle}>Teams</Text>
-      <FlatList
-        data={teamStandings}
-        keyExtractor={item => item.key}
-        renderItem={renderItem}
-        style={styles.list}
-      />
-    </View>
+        <Text style={styles.sectionTitle}>Teams</Text>
+        <FlatList
+          data={teamStandings}
+          keyExtractor={item => item.key}
+          renderItem={renderItem}
+          style={styles.list}
+        />
+      </Animatable.View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  content: {
+    flex: 1,
     padding: 20,
-    backgroundColor: "#f5f5f5",
+  },
+  icon: {
+    width: 50,
+    height: 50,
+    marginBottom: 20,
+    alignSelf: "center",
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
+    fontSize: 36,
+    fontFamily: "AmaticSC-Bold",
+    color: "#1A3C34", // Changed to dark green
     textAlign: "center",
+    textShadowColor: "rgba(0, 0, 0, 0.4)",
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 6,
+    marginBottom: 20,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 24,
+    fontFamily: "Roboto-Bold",
+    color: "#1A3C34", // Changed to dark green
     marginTop: 10,
-    marginBottom: 5,
+    marginBottom: 10,
   },
   list: {
     marginBottom: 20,
   },
   item: {
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 10,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  itemText: {
+    fontSize: 16,
+    fontFamily: "Roboto-Regular",
+    color: "#1A3C34",
   },
   loadingContainer: {
     flex: 1,
@@ -190,7 +217,8 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: "red",
+    fontFamily: "Roboto-Regular",
+    color: "#1A3C34", // Changed to dark green
     textAlign: "center",
   },
 });
