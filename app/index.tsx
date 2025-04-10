@@ -1,11 +1,21 @@
 // app/index.tsx
 import React, { useEffect } from "react";
-import { View, Text, Button, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, StatusBar, Image, Linking } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Button } from "react-native-elements";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../supabase";
+import { useFonts } from "expo-font";
+import * as Animatable from "react-native-animatable";
 
 export default function LandingPage() {
+  const [fontsLoaded] = useFonts({
+    "AmaticSC-Bold": require("../assets/fonts/AmaticSC-Bold.ttf"),
+    "Roboto-Regular": require("../assets/fonts/Roboto-Regular.ttf"),
+    "Roboto-Bold": require("../assets/fonts/Roboto-Bold.ttf"),
+  });
+
   useEffect(() => {
     const checkStatus = async () => {
       const hasCompletedOnboarding = await AsyncStorage.getItem("hasCompletedOnboarding");
@@ -18,13 +28,16 @@ export default function LandingPage() {
       if (session) {
         router.replace("/(tabs)/home");
       } else {
-        // Reset AsyncStorage if no session to avoid stale data
         await AsyncStorage.clear();
         console.log("AsyncStorage cleared due to no session");
       }
     };
     checkStatus();
   }, []);
+
+  if (!fontsLoaded) {
+    return null; // Wait for fonts to load
+  }
 
   const handleGetStarted = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -36,12 +49,63 @@ export default function LandingPage() {
     }
   };
 
+  const handleAttributionPress = () => {
+    Linking.openURL("https://www.vecteezy.com/free-png/competition");
+  };
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome to Pickleball Ladder</Text>
-      <Text style={styles.tagline}>Join, Play, and Climb the Ranks!</Text>
-      <Button title="Get Started" onPress={handleGetStarted} />
-    </View>
+    <LinearGradient
+      colors={["#A8E6CF", "#4A704A"]} // Light green to darker green gradient
+      style={styles.container}
+    >
+      <StatusBar barStyle="light-content" backgroundColor="#4A704A" />
+      <View style={styles.content}>
+        {/* Pickleball PNG */}
+        <Image
+          source={require("../assets/images/pickleball.png")}
+          style={styles.icon}
+        />
+
+        {/* Header */}
+        <Text style={styles.title}>Tendrils</Text>
+        <Text style={styles.tagline}>Pickleball Ladder Management</Text>
+        <Text style={styles.subline}>Put your skills to the test to climb the Vine</Text>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            Whether player, captain, or ladder coordinator, we have the solution
+          </Text>
+          <Animatable.View
+            animation="fadeInUp" // Subtle one-time animation
+            duration={1000}
+            style={styles.buttonWrapper}
+          >
+            <Button
+              title="Get Started"
+              onPress={handleGetStarted}
+              buttonStyle={styles.button}
+              titleStyle={styles.buttonText}
+              containerStyle={styles.buttonContainer}
+              ViewComponent={LinearGradient}
+              linearGradientProps={{
+                colors: ["#FFD700", "#FFC107"], // Yellow gradient
+                start: { x: 0, y: 0 },
+                end: { x: 1, y: 0 },
+              }}
+            />
+          </Animatable.View>
+
+          {/* Attribution */}
+          <Text
+            style={styles.attributionText}
+            onPress={handleAttributionPress}
+          >
+            Competition PNGs by Vecteezy
+          </Text>
+        </View>
+      </View>
+    </LinearGradient>
   );
 }
 
@@ -50,19 +114,83 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f5f5f5",
-    padding: 20,
+  },
+  content: {
+    flex: 1,
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  icon: {
+    width: 50,
+    height: 50,
+    marginBottom: 20,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 10,
+    fontSize: 60,
+    fontFamily: "AmaticSC-Bold",
+    color: "#FFFFFF",
     textAlign: "center",
+    textShadowColor: "rgba(0, 0, 0, 0.4)",
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 6,
   },
   tagline: {
-    fontSize: 18,
-    color: "#666",
-    marginBottom: 20,
+    fontSize: 24,
+    fontFamily: "Roboto-Regular",
+    color: "#FFFFFF",
     textAlign: "center",
+    marginTop: 10,
+  },
+  subline: {
+    fontSize: 18,
+    fontFamily: "Roboto-Regular",
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginTop: 15,
+    maxWidth: "80%",
+  },
+  footer: {
+    alignItems: "center",
+    marginBottom: 20, // Reduced to make space for attribution
+  },
+  footerText: {
+    fontSize: 16,
+    fontFamily: "Roboto-Regular",
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 25,
+    maxWidth: "90%",
+  },
+  buttonWrapper: {
+    borderRadius: 25,
+    overflow: "hidden",
+  },
+  buttonContainer: {
+    borderRadius: 25,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+  },
+  button: {
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    borderRadius: 25,
+  },
+  buttonText: {
+    fontSize: 18,
+    fontFamily: "Roboto-Bold",
+    color: "#1A3C34",
+  },
+  attributionText: {
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    color: "#D3D3D3", // Light gray to be subtle
+    textAlign: "center",
+    marginTop: 15,
+    textDecorationLine: "underline", // Mimics a hyperlink
   },
 });

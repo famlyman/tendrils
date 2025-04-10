@@ -1,3 +1,4 @@
+// app/(tabs)/profile.tsx
 import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, Button, StyleSheet, Alert } from "react-native";
 import { router } from "expo-router";
@@ -178,12 +179,15 @@ export default function Settings() {
 
       const { error: profileError } = await supabase
         .from("profiles")
-        .upsert({
-          user_id: user.id,
-          bio,
-          contact_info: contactInfo,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "user_id" });
+        .upsert(
+          {
+            user_id: user.id,
+            bio,
+            contact_info: contactInfo,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" }
+        );
       if (profileError) throw profileError;
 
       Alert.alert("Success", "Profile updated!");
@@ -193,8 +197,16 @@ export default function Settings() {
     }
   };
 
+  const handleGoToCoordinatorDashboard = () => {
+    router.push("/coordinator");
+  };
+
   if (loading) {
-    return <View style={styles.loadingContainer}><Text>Loading...</Text></View>;
+    return (
+      <View style={styles.loadingContainer}>
+        <Text>Loading...</Text>
+      </View>
+    );
   }
 
   if (!session) {
@@ -241,6 +253,9 @@ export default function Settings() {
       <Button title="Save Profile" onPress={handleSaveProfile} />
       {isPlayer && (
         <Button title="Remove Player Role" onPress={handleRemovePlayerRole} color="red" />
+      )}
+      {roles.includes("Coordinator") && (
+        <Button title="Coordinator Dashboard" onPress={handleGoToCoordinatorDashboard} />
       )}
       <Button title="Log Out" onPress={handleLogout} />
     </View>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, FlatList, StyleSheet, ActivityIndicator, Alert } from "react-native";
-import { supabase } from "../../supabase";
+import { supabase } from "../supabase";
 import { router } from "expo-router";
 
 export default function CoordinatorDashboard() {
