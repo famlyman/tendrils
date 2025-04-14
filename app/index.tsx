@@ -9,6 +9,9 @@ import { supabase } from "../supabase";
 import { useFonts } from "expo-font";
 import * as Animatable from "react-native-animatable";
 
+// Import the theme values
+import { COLORS, TYPOGRAPHY, STYLES, ICONS } from "../constants/theme";
+
 export default function LandingPage() {
   const [fontsLoaded] = useFonts({
     "AmaticSC-Bold": require("../assets/fonts/AmaticSC-Bold.ttf"),
@@ -55,12 +58,12 @@ export default function LandingPage() {
 
   return (
     <LinearGradient
-      colors={["#A8E6CF", "#4A704A"]} // Light green to darker green gradient
+      colors={[COLORS.primaryGradient[0], COLORS.primaryGradient[1]]} // Explicitly create tuple from array
       style={styles.container}
     >
-      <StatusBar barStyle="light-content" backgroundColor="#4A704A" />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primaryGradient[1]} />
       <View style={styles.content}>
-        {/* Pickleball PNG */}
+        {/* Pickleball PNG - To be replaced with new illustration */}
         <Image
           source={require("../assets/images/pickleball.png")}
           style={styles.icon}
@@ -68,23 +71,35 @@ export default function LandingPage() {
 
         {/* Updated Header */}
         <Text style={styles.title}>TENDRILS</Text>
-        <Text style={styles.tagline}>The Ultimate Pickleball Ladder Experience</Text>
-        <Animatable.Text 
-          animation="fadeIn" 
-          duration={1500} 
-          style={styles.callToAction}
-        >
-          CLIMB THE VINE. CLAIM YOUR GLORY.
-        </Animatable.Text>
+        <View style={STYLES.textOverlay}>
+          <Text style={styles.tagline}>The Ultimate Pickleball Ladder Experience</Text>
+        </View>
+        <Animatable.View style={STYLES.textOverlay} animation="fadeIn" duration={1500}>
+          <Text style={styles.callToAction}>CLIMB THE VINE. CLAIM YOUR GLORY.</Text>
+        </Animatable.View>
 
         {/* Updated Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            From casual players to competitive captains, Tendrils transforms your pickleball passion into organized competition that grows with your skills.
-          </Text>
-          <Text style={[styles.footerText, styles.communityText]}>
-            JOIN THE FASTEST-GROWING PICKLEBALL COMMUNITY
-          </Text>
+          {/* Footer description with icons */}
+          <View style={[styles.footerTextContainer, STYLES.textOverlay]}>
+            <View style={styles.footerTextRow}>
+              <Image source={ICONS.vine} style={STYLES.featureIcon} />
+              <Text style={styles.footerText}> Create or join vines, </Text>
+            </View>
+            <View style={styles.footerTextRow}>
+              <Image source={ICONS.trophy} style={STYLES.featureIcon} />
+              <Text style={styles.footerText}> challenge opponents, and </Text>
+            </View>
+            <View style={styles.footerTextRow}>
+              <Image source={ICONS.ladder} style={STYLES.featureIcon} />
+              <Text style={styles.footerText}> climb the ladder to become a pickleball legend.</Text>
+            </View>
+          </View>
+
+          <View style={STYLES.textOverlay}>
+            <Text style={styles.communityText}>JOIN THE FASTEST-GROWING PICKLEBALL COMMUNITY</Text>
+          </View>
+
           <Animatable.View
             animation="fadeInUp"
             duration={1000}
@@ -98,7 +113,7 @@ export default function LandingPage() {
               containerStyle={styles.buttonContainer}
               ViewComponent={LinearGradient}
               linearGradientProps={{
-                colors: ["#FFD700", "#FFC107"], // Yellow gradient
+                colors: COLORS.buttonGradient, // Use button gradient from theme
                 start: { x: 0, y: 0 },
                 end: { x: 1, y: 0 },
               }}
@@ -137,25 +152,26 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   title: {
-    fontSize: 60,
-    fontFamily: "AmaticSC-Bold",
-    color: "#1A3C34",
+    fontSize: TYPOGRAPHY.sizes.landing.title, // 60
+    fontFamily: TYPOGRAPHY.fonts.heading, // AmaticSC-Bold
+    color: COLORS.text.dark, // #1A3C34
     textAlign: "center",
     textShadowColor: "rgba(0, 0, 0, 0.4)",
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 6,
   },
   tagline: {
-    fontSize: 22,
-    fontFamily: "Roboto-Regular",
-    color: "#FFFFFF",
+    fontSize: TYPOGRAPHY.sizes.landing.tagline, // 28 (increased from 22)
+    fontFamily: TYPOGRAPHY.fonts.body, // Roboto-Regular
+    color: COLORS.text.secondary, // #FFD700 (gold)
     textAlign: "center",
     marginTop: 10,
+    letterSpacing: TYPOGRAPHY.letterSpacing.heading, // 0.5 for readability
   },
   callToAction: {
-    fontSize: 24,
-    fontFamily: "Roboto-Bold",
-    color: "#FFFFFF",
+    fontSize: TYPOGRAPHY.sizes.landing.callToAction, // 24
+    fontFamily: TYPOGRAPHY.fonts.bold, // Roboto-Bold
+    color: COLORS.text.primary, // #FFFFFF
     textAlign: "center",
     marginTop: 15,
     maxWidth: "85%",
@@ -167,19 +183,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  footerText: {
-    fontSize: 16,
-    fontFamily: "Roboto-Regular",
-    color: "#FFFFFF",
-    textAlign: "center",
+  footerTextContainer: {
+    flexDirection: "column",
+    alignItems: "center",
     marginBottom: 20,
-    maxWidth: "90%",
+  },
+  footerTextRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  footerText: {
+    fontSize: TYPOGRAPHY.sizes.small, // 14 (decreased from 16)
+    fontFamily: TYPOGRAPHY.fonts.body, // Roboto-Regular
+    color: COLORS.text.primary, // #FFFFFF
+    textAlign: "center",
   },
   communityText: {
-    fontFamily: "Roboto-Bold",
-    fontSize: 18,
+    fontFamily: TYPOGRAPHY.fonts.bold, // Roboto-Bold
+    fontSize: TYPOGRAPHY.sizes.landing.communityText, // 18
     marginBottom: 25,
-    color: "#FFD700", // Gold color to make it stand out
+    color: COLORS.text.secondary, // #FFD700 (gold)
+    textAlign: "center",
   },
   buttonWrapper: {
     borderRadius: 25,
@@ -200,13 +224,13 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 18,
-    fontFamily: "Roboto-Bold",
-    color: "#1A3C34",
+    fontFamily: TYPOGRAPHY.fonts.bold, // Roboto-Bold
+    color: COLORS.text.dark, // #1A3C34
   },
   attributionText: {
     fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    color: "#D3D3D3", // Light gray to be subtle
+    fontFamily: TYPOGRAPHY.fonts.body, // Roboto-Regular
+    color: COLORS.text.attribution, // #E0E0E0 (brighter gray)
     textAlign: "center",
     marginTop: 15,
     textDecorationLine: "underline", // Mimics a hyperlink
