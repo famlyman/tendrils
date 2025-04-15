@@ -8,6 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../supabase";
 import { useFonts } from "expo-font";
 import * as Animatable from "react-native-animatable";
+import { MaterialIcons } from "@expo/vector-icons";
 
 // Import the theme values
 import { COLORS, TYPOGRAPHY, STYLES, ICONS } from "../constants/theme";
@@ -17,6 +18,7 @@ export default function LandingPage() {
     "AmaticSC-Bold": require("../assets/fonts/AmaticSC-Bold.ttf"),
     "Roboto-Regular": require("../assets/fonts/Roboto-Regular.ttf"),
     "Roboto-Bold": require("../assets/fonts/Roboto-Bold.ttf"),
+    "Roboto-Light": require("../assets/fonts/Roboto-Light.ttf"), // Added for footer text
   });
 
   useEffect(() => {
@@ -58,51 +60,78 @@ export default function LandingPage() {
 
   return (
     <LinearGradient
-      colors={[COLORS.primaryGradient[0], COLORS.primaryGradient[1]]} // Explicitly create tuple from array
+      colors={['#A8E6CF', '#6BAF92']} // Softer gradient for better cohesion
       style={styles.container}
     >
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.primaryGradient[1]} />
+      <StatusBar barStyle="light-content" backgroundColor="#6BAF92" />
       <View style={styles.content}>
         {/* Pickleball PNG - To be replaced with new illustration */}
-        <Image
+        <Animatable.Image
           source={require("../assets/images/pickleball.png")}
           style={styles.icon}
+          animation="fadeIn"
+          duration={1000}
         />
 
         {/* Updated Header */}
-        <Text style={styles.title}>TENDRILS</Text>
-        <View style={STYLES.textOverlay}>
-          <Text style={styles.tagline}>The Ultimate Pickleball Ladder Experience</Text>
-        </View>
-        <Animatable.View style={STYLES.textOverlay} animation="fadeIn" duration={1500}>
-          <Text style={styles.callToAction}>CLIMB THE VINE. CLAIM YOUR GLORY.</Text>
-        </Animatable.View>
+        <Animatable.Text
+          style={styles.title}
+          animation="fadeIn"
+          duration={1000}
+          delay={200}
+        >
+          TENDRILS
+        </Animatable.Text>
+        <Animatable.Text
+          style={styles.tagline}
+          animation="fadeIn"
+          duration={1000}
+          delay={400}
+        >
+          The Ultimate Pickleball Ladder Experience
+        </Animatable.Text>
+        <Animatable.Text
+          style={styles.callToAction}
+          animation="fadeIn"
+          duration={1000}
+          delay={600}
+        >
+          CLIMB THE VINE. CLAIM YOUR GLORY.
+        </Animatable.Text>
 
         {/* Updated Footer */}
         <View style={styles.footer}>
-          {/* Footer description with icons */}
-          <View style={[styles.footerTextContainer, STYLES.textOverlay]}>
-            <View style={styles.footerTextRow}>
-              <Image source={ICONS.vine} style={STYLES.featureIcon} />
-              <Text style={styles.footerText}> Create or join vines, </Text>
-            </View>
-            <View style={styles.footerTextRow}>
-              <Image source={ICONS.trophy} style={STYLES.featureIcon} />
-              <Text style={styles.footerText}> challenge opponents, and </Text>
-            </View>
-            <View style={styles.footerTextRow}>
-              <Image source={ICONS.ladder} style={STYLES.featureIcon} />
-              <Text style={styles.footerText}> climb the ladder to become a pickleball legend.</Text>
-            </View>
-          </View>
+          {/* Unified footer text with inline icons */}
+          <Animatable.View
+            style={styles.footerTextContainer}
+            animation="fadeIn"
+            duration={1000}
+            delay={800}
+          >
+            <Text style={styles.footerText}>
+              Create or join
+              <MaterialIcons name="nature" size={20} color={COLORS.secondary} style={styles.inlineIcon} />{" "}
+              vines,
+              <MaterialIcons name="emoji-events" size={20} color={COLORS.secondary} style={styles.inlineIcon} />{" "}
+              challenge opponents, and
+              <MaterialIcons name="stairs" size={20} color={COLORS.secondary} style={styles.inlineIcon} />{" "}
+              climb the ladder to become a pickleball legend.
+            </Text>
+          </Animatable.View>
 
-          <View style={STYLES.textOverlay}>
-            <Text style={styles.communityText}>JOIN THE FASTEST-GROWING PICKLEBALL COMMUNITY</Text>
-          </View>
+          <Animatable.Text
+            style={styles.communityText}
+            animation="fadeIn"
+            duration={1000}
+            delay={1000}
+          >
+            JOIN THE FASTEST-GROWING PICKLEBALL COMMUNITY
+          </Animatable.Text>
 
           <Animatable.View
             animation="fadeInUp"
             duration={1000}
+            delay={1200}
             style={styles.buttonWrapper}
           >
             <Button
@@ -113,7 +142,7 @@ export default function LandingPage() {
               containerStyle={styles.buttonContainer}
               ViewComponent={LinearGradient}
               linearGradientProps={{
-                colors: COLORS.buttonGradient, // Use button gradient from theme
+                colors: COLORS.buttonGradient,
                 start: { x: 0, y: 0 },
                 end: { x: 1, y: 0 },
               }}
@@ -149,7 +178,7 @@ const styles = StyleSheet.create({
   icon: {
     width: 50,
     height: 50,
-    marginBottom: 20,
+    marginBottom: 30, // Increased spacing
   },
   title: {
     fontSize: TYPOGRAPHY.sizes.landing.title, // 60
@@ -159,23 +188,27 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(0, 0, 0, 0.4)",
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 6,
+    marginBottom: 20, // Increased spacing
   },
   tagline: {
-    fontSize: TYPOGRAPHY.sizes.landing.tagline, // 28 (increased from 22)
+    fontSize: TYPOGRAPHY.sizes.landing.tagline, // 28
     fontFamily: TYPOGRAPHY.fonts.body, // Roboto-Regular
-    color: COLORS.text.secondary, // #FFD700 (gold)
+    color: '#FFD54F', // Softer gold for better cohesion
     textAlign: "center",
-    marginTop: 10,
-    letterSpacing: TYPOGRAPHY.letterSpacing.heading, // 0.5 for readability
+    marginBottom: 20, // Increased spacing
+    letterSpacing: TYPOGRAPHY.letterSpacing.heading,
+    textShadowColor: "rgba(74, 112, 74, 0.5)", // Darker green shadow
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   callToAction: {
     fontSize: TYPOGRAPHY.sizes.landing.callToAction, // 24
     fontFamily: TYPOGRAPHY.fonts.bold, // Roboto-Bold
     color: COLORS.text.primary, // #FFFFFF
     textAlign: "center",
-    marginTop: 15,
+    marginBottom: 40, // Increased spacing
     maxWidth: "85%",
-    textShadowColor: "rgba(0, 0, 0, 0.3)",
+    textShadowColor: "rgba(74, 112, 74, 0.5)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
   },
@@ -184,26 +217,28 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   footerTextContainer: {
-    flexDirection: "column",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  footerTextRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    marginBottom: 30, // Increased spacing
+    maxWidth: "90%", // Ensure text doesn't stretch too wide
   },
   footerText: {
-    fontSize: TYPOGRAPHY.sizes.small, // 14 (decreased from 16)
-    fontFamily: TYPOGRAPHY.fonts.body, // Roboto-Regular
+    fontSize: TYPOGRAPHY.sizes.small, // 14
+    fontFamily: "Roboto-Light", // Lighter weight for better contrast
     color: COLORS.text.primary, // #FFFFFF
     textAlign: "center",
+    lineHeight: 22, // Improved readability
+    textShadowColor: "rgba(74, 112, 74, 0.5)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   communityText: {
     fontFamily: TYPOGRAPHY.fonts.bold, // Roboto-Bold
     fontSize: TYPOGRAPHY.sizes.landing.communityText, // 18
-    marginBottom: 25,
-    color: COLORS.text.secondary, // #FFD700 (gold)
+    marginBottom: 30, // Increased spacing
+    color: '#FFD54F', // Softer gold
     textAlign: "center",
+    textShadowColor: "rgba(74, 112, 74, 0.5)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   buttonWrapper: {
     borderRadius: 25,
@@ -216,6 +251,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
+    borderWidth: 2, // Added border for polish
+    borderColor: '#FFD54F',
   },
   button: {
     paddingVertical: 15,
@@ -230,9 +267,12 @@ const styles = StyleSheet.create({
   attributionText: {
     fontSize: 12,
     fontFamily: TYPOGRAPHY.fonts.body, // Roboto-Regular
-    color: COLORS.text.attribution, // #E0E0E0 (brighter gray)
+    color: COLORS.text.attribution, // #E0E0E0
     textAlign: "center",
     marginTop: 15,
-    textDecorationLine: "underline", // Mimics a hyperlink
+    textDecorationLine: "underline",
+  },
+  inlineIcon: {
+    marginHorizontal: 4, // Spacing around inline icons
   },
 });
