@@ -50,26 +50,26 @@ export default function CreateVine() {
       }
       console.log("Session retrieved:", session.user.id);
 
-      let inviteCode = null;
+      let joinCode = null;
       if (isPrivate) {
-        console.log("Generating invite code for private vine...");
+        console.log("Generating join code for private vine...");
         let attempts = 0;
         const maxAttempts = 10; // Prevent infinite loops
         let isUnique = false;
 
         while (!isUnique && attempts < maxAttempts) {
-          inviteCode = generateRandomCode();
-          console.log(`Attempt ${attempts + 1}: Generated invite code: ${inviteCode}`);
+          joinCode = generateRandomCode();
+          console.log(`Attempt ${attempts + 1}: Generated join code: ${joinCode}`);
 
           const { data, error } = await supabase
-            .from("vine")
-            .select("id")
-            .eq("invite_code", inviteCode)
+            .from("vines")
+            .select("vine_id")
+            .eq("join_code", joinCode)
             .maybeSingle(); // Use maybeSingle to handle no rows more gracefully
 
           if (error) {
-            console.log("Error checking invite code:", error.message);
-            throw new Error(`Error checking invite code: ${error.message}`);
+            console.log("Error checking join code:", error.message);
+            throw new Error(`Error checking join code: ${error.message}`);
           }
 
           isUnique = !data; // If no vine with this code exists, it's unique
@@ -77,10 +77,10 @@ export default function CreateVine() {
         }
 
         if (!isUnique) {
-          console.log("Failed to generate a unique invite code after", maxAttempts, "attempts");
-          throw new Error("Unable to generate a unique invite code. Please try again.");
+          console.log("Failed to generate a unique join code after", maxAttempts, "attempts");
+          throw new Error("Unable to generate a unique join code. Please try again.");
         }
-        console.log("Unique invite code generated:", inviteCode);
+        console.log("Unique join code generated:", joinCode);
       }
 
       console.log("Inserting new vine...");
@@ -89,8 +89,8 @@ export default function CreateVine() {
         .insert({
           name: vineName,
           is_private: isPrivate,
-          invite_code: inviteCode,
-          created_by: session.user.id,
+          join_code: joinCode,
+          coordinator_id: session.user.id
         })
         .select()
         .single();
@@ -102,7 +102,7 @@ export default function CreateVine() {
       console.log("Vine created:", vineData);
 
       console.log("Navigating to profile setup...");
-      router.push({ pathname: "/onboarding/profile", params: { vineId: vineData.id } });
+      router.push(`/onboarding/profile?vineId=${vineData.vine_id}`);
     } catch (e) {
       console.log("Unexpected error during vine creation:", e);
       alert(`An error occurred: ${e.message || "Unknown error"}`);
