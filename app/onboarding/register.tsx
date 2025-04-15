@@ -1,0 +1,190 @@
+// app/onboarding/register.tsx
+import React, { useState } from "react";
+import { View, Text, StyleSheet, TextInput, TouchableOpacity } from "react-native";
+import { Button } from "react-native-elements";
+import { router } from "expo-router";
+import { supabase } from "../../supabase";
+import BackgroundWrapper from "../../components/BackgroundWrapper";
+import { COLORS, TYPOGRAPHY } from "../../constants/theme";
+import { LinearGradient } from "expo-linear-gradient";
+
+export default function Register() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLogin, setIsLogin] = useState(false); // Toggle between sign-up and login
+  const [loading, setLoading] = useState(false);
+
+  const handleSignUp = async () => {
+    setLoading(true);
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    setLoading(false);
+    if (error) {
+      alert("Error signing up: " + error.message);
+    } else {
+      // Navigate to the next step after successful sign-up
+      router.push("/onboarding/join-vine");
+    }
+  };
+
+  const handleLogin = async () => {
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    setLoading(false);
+    if (error) {
+      alert("Error logging in: " + error.message);
+    } else {
+      // Navigate to the next step after successful login
+      router.push("/onboarding/join-vine");
+    }
+  };
+
+  const handleSubmit = () => {
+    if (!email || !password) {
+      alert("Please enter both email and password.");
+      return;
+    }
+    if (isLogin) {
+      handleLogin();
+    } else {
+      handleSignUp();
+    }
+  };
+
+  return (
+    <BackgroundWrapper>
+      <View style={styles.container}>
+        <Text style={styles.title}>{isLogin ? "Log In" : "Sign Up"}</Text>
+        <Text style={styles.subtitle}>
+          {isLogin
+            ? "Welcome back! Log in to continue."
+            : "Create an account to start growing with Tendrils!"}
+        </Text>
+
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          placeholderTextColor={COLORS.text.primary}
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor={COLORS.text.primary}
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          autoCapitalize="none"
+        />
+
+        <View style={styles.buttonWrapper}>
+          <Button
+            title={isLogin ? "Log In" : "Sign Up"}
+            onPress={handleSubmit}
+            buttonStyle={styles.button}
+            titleStyle={styles.buttonText}
+            containerStyle={styles.buttonContainer}
+            ViewComponent={LinearGradient}
+            linearGradientProps={{
+              colors: COLORS.buttonGradient,
+              start: { x: 0, y: 0 },
+              end: { x: 1, y: 0 },
+            }}
+            loading={loading}
+          />
+        </View>
+
+        <TouchableOpacity onPress={() => setIsLogin(!isLogin)}>
+          <Text style={styles.toggleText}>
+            {isLogin ? "Need an account? Sign up" : "Already have an account? Log in"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </BackgroundWrapper>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  title: {
+    fontSize: TYPOGRAPHY.sizes.landing.title, // 60
+    fontFamily: TYPOGRAPHY.fonts.heading, // AmaticSC-Bold
+    color: COLORS.text.dark,
+    textAlign: "center",
+    textShadowColor: "rgba(0, 0, 0, 0.4)",
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 6,
+    marginBottom: 15,
+  },
+  subtitle: {
+    fontSize: TYPOGRAPHY.sizes.landing.tagline, // 28
+    fontFamily: TYPOGRAPHY.fonts.body, // Roboto-Regular
+    color: COLORS.secondary,
+    textAlign: "center",
+    marginBottom: 30,
+    textShadowColor: "rgba(74, 112, 74, 0.5)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  input: {
+    width: "80%",
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.secondary,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    color: COLORS.text.primary,
+    fontFamily: TYPOGRAPHY.fonts.body,
+    fontSize: TYPOGRAPHY.sizes.body,
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  buttonWrapper: {
+    borderRadius: 25,
+    overflow: "hidden",
+    marginTop: 20,
+  },
+  buttonContainer: {
+    borderRadius: 25,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    borderWidth: 2,
+    borderColor: COLORS.secondary,
+  },
+  button: {
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    borderRadius: 25,
+  },
+  buttonText: {
+    fontSize: 18,
+    fontFamily: TYPOGRAPHY.fonts.bold,
+    color: COLORS.text.dark,
+  },
+  toggleText: {
+    fontSize: TYPOGRAPHY.sizes.body,
+    fontFamily: TYPOGRAPHY.fonts.body,
+    color: COLORS.secondary,
+    marginTop: 20,
+    textDecorationLine: "underline",
+  },
+});

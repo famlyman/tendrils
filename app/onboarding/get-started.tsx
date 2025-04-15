@@ -1,28 +1,31 @@
-// app/onboarding/welcome.tsx
+// app/onboarding/get-started.tsx
 import React from "react";
-import { View, Text, StyleSheet, Image } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { Button } from "react-native-elements";
 import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import BackgroundWrapper from "../../components/BackgroundWrapper";
 import { COLORS, TYPOGRAPHY } from "../../constants/theme";
 import { LinearGradient } from "expo-linear-gradient";
 
-export default function Welcome() {
+export default function GetStarted() {
+  const handleFinish = async () => {
+    // Mark onboarding as complete
+    await AsyncStorage.setItem("hasCompletedOnboarding", "true");
+    router.replace("/(tabs)/home");
+  };
+
   return (
     <BackgroundWrapper>
       <View style={styles.container}>
-        <Image
-          source={require("../../assets/images/tendrils-illustration.png")}
-          style={styles.illustration}
-        />
-        <Text style={styles.title}>Welcome to Tendrils!</Text>
+        <Text style={styles.title}>You’re Ready to Grow!</Text>
         <Text style={styles.subtitle}>
-          Connect with pickleball players, compete in challenges, and climb the ladder to become a legend.
+          As a new leaf on the vine, it’s time to start climbing the ladder. Challenge opponents, collect fruit, and aim for Node 1!
         </Text>
         <View style={styles.buttonWrapper}>
           <Button
-            title="Next"
-            onPress={() => router.push("/onboarding/register")} // Updated to navigate to register
+            title="Let’s Climb!"
+            onPress={handleFinish}
             buttonStyle={styles.button}
             titleStyle={styles.buttonText}
             containerStyle={styles.buttonContainer}
@@ -45,11 +48,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
-  },
-  illustration: {
-    width: 120,
-    height: 120,
-    marginBottom: 20,
   },
   title: {
     fontSize: TYPOGRAPHY.sizes.landing.title, // 60
