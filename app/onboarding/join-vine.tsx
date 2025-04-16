@@ -46,7 +46,7 @@ export default function JoinVine() {
       alert("Please select a public vine to join.");
       return;
     }
-    router.push({ pathname: "/onboarding/profile", params: { vineId: selectedVine } });
+    router.push({ pathname: "/onboarding/profile", params: { vine_id: selectedVine } });
   };
 
   const handleJoinPrivateVine = async () => {
@@ -67,7 +67,7 @@ export default function JoinVine() {
     if (error || !data) {
       alert("Invalid join code. Please try again.");
     } else {
-      router.push({ pathname: "/onboarding/profile", params: { vineId: data.vine_id } });
+      router.push({ pathname: "/onboarding/profile", params: { vine_id: data.vine_id } });
     }
   };
 
@@ -87,7 +87,6 @@ export default function JoinVine() {
           <Text style={styles.loadingText}>Loading vines...</Text>
         ) : vines.length > 0 ? (
           <View style={styles.vineContainer}>
-            {/* Public Vine Row */}
             <View style={styles.row}>
               <Text style={styles.label}>Public:</Text>
               <View style={styles.pickerContainer}>
@@ -123,7 +122,6 @@ export default function JoinVine() {
               />
             </View>
 
-            {/* Private Vine Row */}
             <View style={styles.row}>
               <Text style={styles.label}>Private:</Text>
               <TextInput
@@ -163,7 +161,7 @@ export default function JoinVine() {
             containerStyle={styles.secondaryButtonContainer}
             ViewComponent={LinearGradient}
             linearGradientProps={{
-              colors: ['#FFECB3', '#FFD54F'],
+              colors: ["#FFECB3", "#FFD54F"],
               start: { x: 0, y: 0 },
               end: { x: 1, y: 0 },
             }}
@@ -230,18 +228,17 @@ const styles = StyleSheet.create({
   },
   picker: {
     height: 50,
-    color: COLORS.text.primary, // Color for the selected value
+    color: COLORS.text.primary,
   },
   pickerAndroid: {
-    // Additional styling for Android to try to force dropdown text visibility
-    color: COLORS.text.dark, // Fallback for Android
+    color: COLORS.text.dark,
   },
   pickerItem: {
-    color: COLORS.text.dark, // Color for dropdown items
+    color: COLORS.text.dark,
     fontSize: TYPOGRAPHY.sizes.body,
     fontFamily: TYPOGRAPHY.fonts.body,
     height: 50,
-    backgroundColor: COLORS.secondary, // Background for dropdown items to ensure contrast
+    backgroundColor: COLORS.secondary,
   },
   input: {
     flex: 1,

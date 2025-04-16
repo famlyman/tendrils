@@ -1,5 +1,5 @@
 // app/onboarding/create-vine.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TextInput, Switch } from "react-native";
 import { Button } from "react-native-elements";
 import { router } from "expo-router";
@@ -8,7 +8,6 @@ import BackgroundWrapper from "../../components/BackgroundWrapper";
 import { COLORS, TYPOGRAPHY } from "../../constants/theme";
 import { LinearGradient } from "expo-linear-gradient";
 
-// Function to generate a random 6-character code
 const generateRandomCode = () => {
   const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let code = "";
@@ -22,6 +21,41 @@ export default function CreateVine() {
   const [vineName, setVineName] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const checkProfileAndRedirect = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          console.log("No session found - redirecting to login");
+          router.replace("/login");
+          return;
+        }
+
+        const { data: profiles, error: profileError } = await supabase
+          .from("profiles")
+          .select("vine_id")
+          .eq("user_id", session.user.id);
+
+        if (profileError) {
+          console.log("Error checking profile in create-vine:", profileError.message);
+          return;
+        }
+
+        if (profiles && profiles.length > 0) {
+          const profile = profiles[0];
+          if (profile.vine_id) {
+            console.log("User already has a vine_id:", profile.vine_id, "Redirecting to home...");
+            router.replace("/(tabs)/home");
+            return;
+          }
+        }
+      } catch (e) {
+        console.log("Error in create-vine useEffect:", e);
+      }
+    };
+    checkProfileAndRedirect();
+  }, []);
 
   const handleCreateVine = async () => {
     console.log("Starting vine creation...");
@@ -54,7 +88,7 @@ export default function CreateVine() {
       if (isPrivate) {
         console.log("Generating join code for private vine...");
         let attempts = 0;
-        const maxAttempts = 10; // Prevent infinite loops
+        const maxAttempts = 10;
         let isUnique = false;
 
         while (!isUnique && attempts < maxAttempts) {
@@ -65,14 +99,14 @@ export default function CreateVine() {
             .from("vines")
             .select("vine_id")
             .eq("join_code", joinCode)
-            .maybeSingle(); // Use maybeSingle to handle no rows more gracefully
+            .maybeSingle();
 
           if (error) {
             console.log("Error checking join code:", error.message);
             throw new Error(`Error checking join code: ${error.message}`);
           }
 
-          isUnique = !data; // If no vine with this code exists, it's unique
+          isUnique = !data;
           attempts++;
         }
 
@@ -88,24 +122,24 @@ export default function CreateVine() {
         .from("vines")
         .insert({
           name: vineName,
-          is_private: isPrivate,
+          is_public: !isPrivate,
           join_code: joinCode,
-          coordinator_id: session.user.id
+          coordinator_id: session.user.id,
         })
         .select()
         .single();
 
       if (vineError) {
-        console.log("Vine insert error:", vineError.message);
+        console.log("Vine insert error:", vineError.message, vineError.code);
         throw new Error(`Error creating vine: ${vineError.message}`);
       }
       console.log("Vine created:", vineData);
 
-      console.log("Navigating to profile setup...");
-      router.push(`/onboarding/profile?vineId=${vineData.vine_id}`);
+      console.log("Navigating to profile setup with vineId:", vineData.vine_id);
+      router.push({ pathname: "/onboarding/profile", params: { vine_id: vineData.vine_id } });
     } catch (e) {
-      console.log("Unexpected error during vine creation:", e);
-      alert(`An error occurred: ${e.message || "Unknown error"}`);
+      console.error("Unexpected error during vine creation:", e);
+      alert(`An error occurred: ${(e as Error).message || "Unknown error"}`);
     } finally {
       setLoading(false);
       console.log("Vine creation completed (success or failure)");

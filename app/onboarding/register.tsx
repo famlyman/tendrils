@@ -11,7 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isLogin, setIsLogin] = useState(false); // Toggle between sign-up and login
+
   const [loading, setLoading] = useState(false);
 
   const handleSignUp = async () => {
@@ -30,42 +30,12 @@ export default function Register() {
     }
   };
 
-  const handleLogin = async () => {
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    setLoading(false);
-    if (error) {
-      alert("Error logging in: " + error.message);
-    } else {
-      // Navigate to the next step after successful login
-      router.push("/onboarding/join-vine");
-    }
-  };
-
-  const handleSubmit = () => {
-    if (!email || !password) {
-      alert("Please enter both email and password.");
-      return;
-    }
-    if (isLogin) {
-      handleLogin();
-    } else {
-      handleSignUp();
-    }
-  };
-
   return (
     <BackgroundWrapper>
       <View style={styles.container}>
-        <Text style={styles.title}>{isLogin ? "Log In" : "Sign Up"}</Text>
+        <Text style={styles.title}>Sign Up</Text>
         <Text style={styles.subtitle}>
-          {isLogin
-            ? "Welcome back! Log in to continue."
-            : "Create an account to start growing with Tendrils!"}
+          Create an account to start growing with Tendrils!
         </Text>
 
         <TextInput
@@ -90,8 +60,9 @@ export default function Register() {
 
         <View style={styles.buttonWrapper}>
           <Button
-            title={isLogin ? "Log In" : "Sign Up"}
-            onPress={handleSubmit}
+            title={loading ? "Signing Up..." : "Sign Up"}
+            onPress={handleSignUp}
+            disabled={loading}
             buttonStyle={styles.button}
             titleStyle={styles.buttonText}
             containerStyle={styles.buttonContainer}
@@ -105,9 +76,9 @@ export default function Register() {
           />
         </View>
 
-        <TouchableOpacity onPress={() => setIsLogin(!isLogin)}>
+        <TouchableOpacity style={{ marginTop: 16 }} onPress={() => router.push('/login')}>
           <Text style={styles.toggleText}>
-            {isLogin ? "Need an account? Sign up" : "Already have an account? Log in"}
+            Already have an account? Log in
           </Text>
         </TouchableOpacity>
       </View>

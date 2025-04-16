@@ -8,18 +8,19 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../../supabase";
 import * as Animatable from "react-native-animatable";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
+import * as ImagePicker from "expo-image-picker";
 
 export default function Profile() {
   const [session, setSession] = useState<any>(null);
   const [name, setName] = useState<string>("");
+  const [rating, setRating] = useState<number | null>(null); // New field for rating
+  const [profilePicture, setProfilePicture] = useState<string | null>(null); // New field for profile picture
   const [roles, setRoles] = useState<string[]>([]);
-  const [isPlayer, setIsPlayer] = useState(false);
   const [bio, setBio] = useState<string>("");
-  const [contactInfo, setContactInfo] = useState<string>("");
-  const [teamInfo, setTeamInfo] = useState<string>("");
+  const [phone, setPhone] = useState<string>(""); // Renamed from contactInfo to phone
   const [joinCode, setJoinCode] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const [showEditCard, setShowEditCard] = useState(false); // New state for toggling the edit card
+  const [showEditCard, setShowEditCard] = useState(false);
 
   const saveButtonRef = useRef<any>(null);
   const removeButtonRef = useRef<any>(null);
@@ -30,24 +31,28 @@ export default function Profile() {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
+        console.log("[Profile] Fetching user data...");
         const { data: { session } } = await supabase.auth.getSession();
         setSession(session);
+        console.log("[Profile] Session:", session);
 
         if (session) {
           const { data: userData, error: userError } = await supabase.auth.getUser();
           if (userError) throw userError;
           const fullName = userData.user.user_metadata.full_name || "";
+          const userId = userData.user.id;
+          console.log("[Profile] User ID:", userId);
           setName(fullName);
 
           const { data: userRoleData, error: userRoleError } = await supabase
             .from("user_roles")
-            .select("role_id")
+            .select("role")
             .eq("user_id", session.user.id);
           if (userRoleError) throw userRoleError;
 
           let roleNames: string[] = [];
           if (userRoleData && userRoleData.length > 0) {
-            const roleIds = userRoleData.map(item => item.role_id);
+            const roleIds = userRoleData.map(item => item.role);
             const { data: roleData, error: roleError } = await supabase
               .from("roles")
               .select("role_name")
@@ -56,23 +61,28 @@ export default function Profile() {
 
             roleNames = roleData.map(item => item.role_name);
             setRoles(roleNames);
-            setIsPlayer(roleNames.includes("Player"));
           } else {
             setRoles([]);
-            setIsPlayer(false);
           }
 
           const { data: profileData, error: profileError } = await supabase
             .from("profiles")
-            .select("bio, contact_info")
+            .select("name, bio, phone, rating, profile_picture") // Fetch name from profiles
             .eq("user_id", session.user.id)
             .single();
+          console.log("[Profile] profileData from profiles table:", profileData);
+          console.log("[Profile] profileError:", profileError);
           if (!profileError && profileData) {
+            setName(profileData.name || fullName || ""); // Prefer name from profiles
             setBio(profileData.bio || "");
-            setContactInfo(profileData.contact_info || "");
+            setPhone(profileData.phone || "");
+            setRating(profileData.rating || null);
+            setProfilePicture(profileData.profile_picture || null);
+          } else {
+            setName(fullName || "");
           }
 
-          if (!fullName) {
+          if (!fullName && (!profileData || !profileData.name)) {
             const { data: playerData, error: playerError } = await supabase
               .from("players")
               .select("name")
@@ -80,38 +90,6 @@ export default function Profile() {
               .single();
             if (!playerError && playerData) setName(playerData.name);
           }
-
-          let teamText = "";
-          if (roleNames.includes("Captain")) {
-            const { data: captainTeam, error: captainError } = await supabase
-              .from("teams")
-              .select("team_name, join_code")
-              .eq("captain_id", session.user.id)
-              .single();
-            if (!captainError && captainTeam) {
-              teamText += `Captain of: ${captainTeam.team_name}`;
-              setJoinCode(captainTeam.join_code);
-            }
-          }
-          const { data: playerData, error: playerError } = await supabase
-            .from("players")
-            .select("player_id")
-            .eq("user_id", session.user.id)
-            .single();
-          if (!playerError && playerData) {
-            const { data: playerTeams, error: teamError } = await supabase
-              .from("team_players")
-              .select("teams(team_name)")
-              .eq("player_id", playerData.player_id);
-            if (!teamError && playerTeams?.length > 0) {
-              const teamNames = playerTeams
-                .map((pt: { teams: { team_name: string }[] }) => pt.teams[0].team_name)
-                .join(", ");
-              teamText += (teamText ? " | " : "") + `Plays for: ${teamNames}`;
-            }
-            setIsPlayer(true);
-          }
-          setTeamInfo(teamText || "Not affiliated with any team");
         }
       } catch (err) {
         console.log("Error fetching user data:", err);
@@ -121,6 +99,30 @@ export default function Profile() {
     };
     fetchUserData();
   }, []);
+
+  const pickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Error", "Sorry, we need camera roll permissions to make this work!");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setProfilePicture(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.log("Error picking image:", error);
+      Alert.alert("Error", "Failed to pick image. Please try again.");
+    }
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -154,9 +156,7 @@ export default function Profile() {
                 .eq("role_id", 1);
               if (roleError && roleError.code !== "PGRST116") throw roleError;
 
-              setIsPlayer(false);
               setRoles(roles.filter(role => role !== "Player"));
-              setTeamInfo(teamInfo.replace(/Plays for: .*$/, "").trim() || "Not affiliated with any team");
               Alert.alert("Success", "Player role removed.");
             } catch (err: any) {
               console.log("Error removing player role:", err);
@@ -173,19 +173,57 @@ export default function Profile() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No user");
 
+      let profilePictureUrl: string | null = null;
+      if (profilePicture && profilePicture.startsWith("file://")) { // Check if it's a new image (local URI)
+        const fileExt = profilePicture.split(".").pop()?.toLowerCase() || "jpg";
+        const fileName = `${user.id}.${fileExt}`;
+        const response = await fetch(profilePicture);
+        const fileBlob = await response.blob();
+
+        const { error: uploadError } = await supabase.storage
+          .from("profile-pictures")
+          .upload(fileName, fileBlob, {
+            contentType: `image/${fileExt}`,
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.log("Image upload error:", uploadError.message);
+          Alert.alert("Error", "Failed to upload profile picture.");
+          return;
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from("profile-pictures")
+          .getPublicUrl(fileName);
+
+        profilePictureUrl = publicUrlData.publicUrl;
+        setProfilePicture(profilePictureUrl); // Update state with the new URL
+      } else {
+        profilePictureUrl = profilePicture; // Keep the existing URL if no new image is selected
+      }
+
       if (name !== user.user_metadata.full_name) {
         const { error: authError } = await supabase.auth.updateUser({
           data: { full_name: name },
         });
         if (authError) throw authError;
 
-        if (isPlayer) {
-          const { error: playerError } = await supabase
-            .from("players")
-            .update({ name })
-            .eq("user_id", user.id);
-          if (playerError) throw playerError;
-        }
+        const { error: playerError } = await supabase
+          .from("players")
+          .update({ name })
+          .eq("user_id", user.id);
+        if (playerError) throw playerError;
+      }
+
+      const ratingNum = rating ? parseFloat(rating.toString()) : null;
+      if (ratingNum && (isNaN(ratingNum) || ratingNum < 0 || ratingNum > 5)) {
+        Alert.alert("Error", "Please enter a valid rating between 0 and 5.");
+        return;
+      }
+      if (phone && !/^\d{10}$/.test(phone.replace(/\D/g, ""))) {
+        Alert.alert("Error", "Please enter a valid 10-digit phone number (e.g., 1234567890).");
+        return;
       }
 
       const { error: profileError } = await supabase
@@ -193,8 +231,10 @@ export default function Profile() {
         .upsert(
           {
             user_id: user.id,
-            bio,
-            contact_info: contactInfo,
+            bio: bio || null,
+            phone: phone.replace(/\D/g, "") || null, // Renamed from contact_info to phone
+            rating: ratingNum, // Save rating
+            profile_picture: profilePictureUrl, // Save profile picture URL
             updated_at: new Date().toISOString(),
           },
           { onConflict: "user_id" }
@@ -202,7 +242,7 @@ export default function Profile() {
       if (profileError) throw profileError;
 
       Alert.alert("Success", "Profile updated!");
-      setShowEditCard(false); // Hide the card after saving
+      setShowEditCard(false);
     } catch (err: any) {
       console.log("Error saving profile:", err);
       Alert.alert("Error", "Failed to save profile.");
@@ -257,19 +297,30 @@ export default function Profile() {
     );
   }
 
-  const canRemovePlayerRole = isPlayer && (roles.includes("Captain") || roles.includes("Coordinator"));
+  // Log state before render
+  console.log("[Profile] Render state:", { name, bio, phone, rating, profilePicture });
 
   return (
     <LinearGradient colors={["#A8E6CF", "#4A704A"]} style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#4A704A" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Animatable.View animation="fadeIn" duration={1000} style={styles.content}>
-          <Image source={require("../../assets/images/pickleball.png")} style={styles.icon} />
+          {profilePicture ? (
+            <Image source={{ uri: profilePicture }} style={styles.profilePicture} />
+          ) : (
+            <View style={styles.profilePicturePlaceholder}>
+              <Text style={styles.placeholderText}>No Picture</Text>
+            </View>
+          )}
           <Text style={styles.title}>Profile</Text>
           <Text style={styles.label}>Email: {session.user.email}</Text>
-          <Text style={styles.label}>Roles: {roles.join(", ") || "None"}</Text>
-          <Text style={styles.label}>Team: {teamInfo}</Text>
-          {joinCode && (
+          <Text style={styles.label}>Name: {name}</Text>
+          {rating !== null && <Text style={styles.label}>Rating: {rating}</Text>}
+          {bio && <Text style={styles.label}>Bio: {bio}</Text>}
+          {phone && <Text style={styles.label}>Phone: {phone}</Text>}
+          {/* <Text style={styles.label}>Roles: {roles.join(", ") || "None"}</Text> */}
+          {/* <Text style={styles.label}>Team: {teamInfo}</Text> */}
+          {roles.includes("Coordinator") && joinCode && (
             <Text style={styles.label}>Join Code: {joinCode} (Share this with players!)</Text>
           )}
           <TouchableOpacity style={styles.editButton} onPress={toggleEditCard}>
@@ -279,6 +330,17 @@ export default function Profile() {
           {showEditCard && (
             <Animatable.View animation="fadeIn" duration={500} style={styles.card}>
               <Text style={styles.cardTitle}>Edit Profile</Text>
+              <Text style={styles.cardLabel}>Profile Picture:</Text>
+              {profilePicture ? (
+                <Image source={{ uri: profilePicture }} style={styles.profilePicture} />
+              ) : (
+                <View style={styles.profilePicturePlaceholder}>
+                  <Text style={styles.placeholderText}>No Picture Selected</Text>
+                </View>
+              )}
+              <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
+                <Text style={styles.uploadButtonText}>Change Profile Picture</Text>
+              </TouchableOpacity>
               <Text style={styles.cardLabel}>Name:</Text>
               <TextInput
                 style={styles.input}
@@ -287,6 +349,15 @@ export default function Profile() {
                 placeholder="Enter your name"
                 placeholderTextColor="#999"
                 autoCapitalize="words"
+              />
+              <Text style={styles.cardLabel}>Rating (0-5):</Text>
+              <TextInput
+                style={styles.input}
+                value={rating?.toString() || ""}
+                onChangeText={(text) => setRating(text ? parseFloat(text) : null)}
+                placeholder="Your Rating (e.g., 3.5)"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
               />
               <Text style={styles.cardLabel}>Bio:</Text>
               <TextInput
@@ -297,13 +368,14 @@ export default function Profile() {
                 placeholderTextColor="#999"
                 multiline
               />
-              <Text style={styles.cardLabel}>Contact Info:</Text>
+              <Text style={styles.cardLabel}>Phone Number:</Text>
               <TextInput
                 style={styles.input}
-                value={contactInfo}
-                onChangeText={setContactInfo}
-                placeholder="e.g., phone or social handle"
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="e.g., 1234567890"
                 placeholderTextColor="#999"
+                keyboardType="phone-pad"
               />
             </Animatable.View>
           )}
@@ -365,26 +437,7 @@ export default function Profile() {
               }}
             />
           </Animatable.View>
-          {canRemovePlayerRole && (
-            <Animatable.View ref={removeButtonRef}>
-              <Button
-                title="Remove Player Role"
-                onPress={() => {
-                  removeButtonRef.current?.bounce(800);
-                  handleRemovePlayerRole();
-                }}
-                buttonStyle={[styles.button, styles.removeButton]}
-                titleStyle={styles.removeButtonText}
-                containerStyle={styles.removeButtonWrapper}
-                ViewComponent={LinearGradient}
-                linearGradientProps={{
-                  colors: ["#FF6666", "#FF3333"],
-                  start: { x: 0, y: 0 },
-                  end: { x: 1, y: 0 },
-                }}
-              />
-            </Animatable.View>
-          )}
+
         </Animatable.View>
       </ScrollView>
     </LinearGradient>
@@ -411,6 +464,40 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     alignSelf: "center",
   },
+  profilePicture: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  profilePicturePlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#ccc",
+    alignSelf: "center",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  placeholderText: {
+    color: "#fff",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  uploadButton: {
+    backgroundColor: "#007AFF",
+    padding: 10,
+    borderRadius: 5,
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  uploadButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontFamily: "Roboto-Regular",
+  },
   title: {
     fontSize: 36,
     fontFamily: "AmaticSC-Bold",
@@ -434,7 +521,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     paddingVertical: 10,
     paddingHorizontal: 15,
-    backgroundColor: "rgba(255, 255, 255, 0.2)", // Subtle white background
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
     borderRadius: 10,
   },
   editIcon: {

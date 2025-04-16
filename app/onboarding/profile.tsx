@@ -1,122 +1,194 @@
 // app/onboarding/profile.tsx
-import React, { useState } from "react";
-import { View, Text, StyleSheet, TextInput } from "react-native";
-import { Button } from "react-native-elements";
+import React, { useState, useEffect } from "react";
+import { View, Text, TextInput, Button, StyleSheet, Alert, ScrollView, Image, TouchableOpacity } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { supabase } from "../../supabase";
-import BackgroundWrapper from "../../components/BackgroundWrapper";
-import { COLORS, TYPOGRAPHY } from "../../constants/theme";
-import { LinearGradient } from "expo-linear-gradient";
 
 export default function ProfileSetup() {
-  const { vineId } = useLocalSearchParams();
+  const { vine_id } = useLocalSearchParams(); // Get vine_id from navigation params
   const [name, setName] = useState("");
   const [rating, setRating] = useState("");
+  const [bio, setBio] = useState("");
+  const [phone, setPhone] = useState("");
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleNext = async () => {
-    console.log("Starting profile setup...");
-    console.log("Input - Name:", name, "Rating:", rating, "Vine ID:", vineId);
+  useEffect(() => {
+    const checkProfile = async () => {
+      try {
+        if (!vine_id) {
+          console.log("No vine_id provided in navigation params");
+          Alert.alert(
+            "Error",
+            "Vine ID is missing. Please join or create a vine first.",
+            [{ text: "OK", onPress: () => router.replace("/onboarding/join-vine") }]
+          );
+          return;
+        }
 
-    if (!name) {
-      console.log("Validation failed: Name is missing");
-      alert("Please enter your name.");
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          router.replace("/login");
+          return;
+        }
+
+        const { data: profiles, error } = await supabase
+          .from("profiles")
+          .select("vine_id")
+          .eq("user_id", session.user.id);
+
+        if (error) {
+          console.log("Error checking profile:", error.message);
+          Alert.alert("Error", "Failed to check profile. Please try again.");
+          return;
+        }
+
+        if (profiles.length > 0) {
+          const profile = profiles[0];
+          if (profile.vine_id) {
+            router.replace("/(tabs)/home");
+            return;
+          }
+        }
+
+        // Verify the vine exists
+        const { data: vine, error: vineError } = await supabase
+          .from("vines")
+          .select("vine_id")
+          .eq("vine_id", vine_id)
+          .single();
+
+        if (vineError || !vine) {
+          console.log("Invalid vine ID:", vine_id);
+          Alert.alert(
+            "Error",
+            "The selected vine does not exist. Please try again.",
+            [{ text: "OK", onPress: () => router.replace("/onboarding/join-vine") }]
+          );
+          return;
+        }
+      } catch (error) {
+        console.error("Error in checkProfile:", error);
+        Alert.alert("Error", "An unexpected error occurred. Please try again.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkProfile();
+  }, [vine_id]);
+
+  const pickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Error", "Sorry, we need camera roll permissions to make this work!");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setProfilePicture(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.log("Error picking image:", error);
+      Alert.alert("Error", "Failed to pick image. Please try again.");
+    }
+  };
+
+
+
+  const handleProfileSetup = async () => {
+    if (!name.trim()) {
+      Alert.alert("Error", "Please enter your name.");
       return;
     }
-
-    const numericRating = parseFloat(rating);
-    if (!rating || isNaN(numericRating) || numericRating < 1.0 || numericRating > 5.0) {
-      console.log("Validation failed: Invalid rating");
-      alert("Please enter a valid rating between 1.0 and 5.0.");
+    const ratingNum = parseFloat(rating);
+    if (!rating || isNaN(ratingNum) || ratingNum < 0 || ratingNum > 5) {
+      Alert.alert("Error", "Please enter a valid rating between 0 and 5.");
       return;
     }
-
-    if (!vineId) {
-      console.log("Validation failed: Vine ID is missing");
-      alert("No vine selected. Please go back and select or create a vine.");
+    if (phone && !/^\d{10}$/.test(phone.replace(/\D/g, ""))) {
+      Alert.alert("Error", "Please enter a valid 10-digit phone number (e.g., 1234567890).");
       return;
     }
 
     setLoading(true);
+    console.log("Starting profile setup...");
     try {
-      console.log("Fetching session...");
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        console.log("Session error:", sessionError.message);
-        alert("Error fetching session. Please try again.");
-        return;
-      }
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        console.log("No session found - redirecting to signup");
-        alert("You must be logged in to set up your profile.");
-        router.push("/signup");
+        Alert.alert("Error", "Not logged in.");
         return;
       }
-      console.log("Session retrieved:", session.user.id);
 
-      console.log("Upserting profile...");
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .upsert({
-          user_id: session.user.id,
-          name,
-          rating: numericRating,
-          vine_id: vineId,
-        })
-        .select()
-        .single();
+      let profilePictureUrl: string | null = null;
+      if (profilePicture) {
+        const fileExt = profilePicture.split(".").pop()?.toLowerCase() || "jpg";
+        const fileName = `${session.user.id}.${fileExt}`;
+        const response = await fetch(profilePicture);
+        const fileBlob = await response.blob();
 
-      if (profileError) {
-        console.log("Profile upsert error:", profileError.message);
-        alert(`Failed to save profile: ${profileError.message}`);
+        const { error: uploadError } = await supabase.storage
+          .from("profile-pictures")
+          .upload(fileName, fileBlob, {
+            contentType: `image/${fileExt}`,
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.log("Image upload error:", uploadError.message);
+          Alert.alert("Error", "Failed to upload profile picture.");
+          return;
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from("profile-pictures")
+          .getPublicUrl(fileName);
+
+        profilePictureUrl = publicUrlData.publicUrl;
+      }
+
+
+
+
+
+      console.log("Input - Name:", name, "Rating:", rating, "Bio:", bio, "Phone:", phone, "Vine ID:", vine_id);
+
+      // Upsert profile with vine_id
+      const { data: profile, error: profileError } = await supabase
+  .from("profiles")
+  .upsert({
+    user_id: session.user.id,
+    name: name.trim(),
+    rating: ratingNum,
+    bio: bio.trim() || null,
+    phone: phone.replace(/\D/g, "") || null,
+    profile_picture: profilePictureUrl,
+    vine_id: vine_id,
+  })
+  .select()
+  .single();
+
+if (profileError) {
+        console.log("Profile upsert error:", profileError.message, profileError.code);
+        Alert.alert("Error", profileError.message);
         return;
       }
-      if (!profileData) {
-        console.log("Profile upsert returned no data");
-        alert("Failed to save profile: No data returned.");
-        return;
-      }
-      console.log("Profile saved:", profileData);
-
-      console.log("Counting profiles for vine...");
-      const { count, error: countError } = await supabase
-        .from("profiles")
-        .select("*", { count: "exact", head: true })
-        .eq("vine_id", vineId);
-
-      if (countError) {
-        console.log("Count error:", countError.message);
-        alert(`Failed to initialize ladder position: ${countError.message}`);
-        return;
-      }
-      console.log("Profile count:", count);
-
-      const nodePosition = (count || 0) + 1;
-      console.log("Calculated node position:", nodePosition);
-
-      console.log("Inserting ladder node...");
-      const { data: nodeData, error: nodeError } = await supabase
-        .from("ladder_nodes")
-        .insert({
-          vine_id: vineId,
-          profile_id: profileData.id,
-          position: nodePosition,
-        })
-        .select()
-        .single();
-
-      if (nodeError) {
-        console.log("Ladder node insert error:", nodeError.message);
-        alert(`Failed to initialize ladder position: ${nodeError.message}`);
-        return;
-      }
-      console.log("Ladder node created:", nodeData);
-
-      console.log("Navigating to get-started...");
-      router.push("/onboarding/get-started");
-    } catch (e) {
-      console.log("Unexpected error during profile setup:", e);
-      alert(`An unexpected error occurred: ${e.message || "Unknown error"}`);
+      console.log("Profile saved with vine_id:", profile.vine_id);
+      // Redirect to home after profile setup
+      router.replace("/onboarding/get-started");
+    } catch (error) {
+      console.log("Profile setup error:", error);
+      Alert.alert("Error", "Failed to save profile. Try again.");
     } finally {
       setLoading(false);
       console.log("Profile setup completed (success or failure)");
@@ -124,121 +196,136 @@ export default function ProfileSetup() {
   };
 
   return (
-    <BackgroundWrapper>
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
       <View style={styles.container}>
         <Text style={styles.title}>Set Up Your Profile</Text>
-        <Text style={styles.subtitle}>
-          Tell us a bit about yourself to get started as a leaf on the vine!
-        </Text>
 
+        <Text style={styles.label}>Profile Picture</Text>
+        {profilePicture ? (
+          <Image source={{ uri: profilePicture }} style={styles.profilePicture} />
+        ) : (
+          <View style={styles.profilePicturePlaceholder}>
+            <Text style={styles.placeholderText}>No Picture Selected</Text>
+          </View>
+        )}
+        <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
+          <Text style={styles.uploadButtonText}>Choose Profile Picture</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.label}>Name *</Text>
         <TextInput
           style={styles.input}
-          placeholder="Enter your name"
-          placeholderTextColor={COLORS.text.primary}
+          placeholder="Your Name"
           value={name}
           onChangeText={setName}
+          autoCapitalize="words"
         />
 
-        <Text style={styles.label}>Enter your rating (1.0 to 5.0):</Text>
+        <Text style={styles.label}>Rating (0-5) *</Text>
         <TextInput
           style={styles.input}
-          placeholder="e.g., 3.5"
-          placeholderTextColor={COLORS.text.primary}
+          placeholder="Your Rating (e.g., 3.5)"
           value={rating}
           onChangeText={setRating}
           keyboardType="numeric"
         />
 
-        <View style={styles.buttonWrapper}>
-          <Button
-            title="Next"
-            onPress={handleNext}
-            buttonStyle={styles.button}
-            titleStyle={styles.buttonText}
-            containerStyle={styles.buttonContainer}
-            ViewComponent={LinearGradient}
-            linearGradientProps={{
-              colors: COLORS.buttonGradient,
-              start: { x: 0, y: 0 },
-              end: { x: 1, y: 0 },
-            }}
-            loading={loading}
-          />
-        </View>
+        <Text style={styles.label}>Bio</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          placeholder="Tell us about yourself (optional)"
+          value={bio}
+          onChangeText={setBio}
+          multiline
+          numberOfLines={4}
+        />
+
+        <Text style={styles.label}>Phone Number</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Phone Number (optional, e.g., 1234567890)"
+          value={phone}
+          onChangeText={setPhone}
+          keyboardType="phone-pad"
+        />
+
+        <Button
+          title={loading ? "Saving..." : "Save Profile"}
+          onPress={handleProfileSetup}
+          disabled={loading}
+        />
       </View>
-    </BackgroundWrapper>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  scrollContainer: {
+    flexGrow: 1,
     justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 20,
+    backgroundColor: "#f5f5f5",
+  },
+  container: {
+    padding: 20,
   },
   title: {
-    fontSize: TYPOGRAPHY.sizes.landing.title,
-    fontFamily: TYPOGRAPHY.fonts.heading,
-    color: COLORS.text.dark,
-    textAlign: "center",
-    textShadowColor: "rgba(0, 0, 0, 0.4)",
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 6,
-    marginBottom: 15,
-  },
-  subtitle: {
-    fontSize: TYPOGRAPHY.sizes.landing.tagline,
-    fontFamily: TYPOGRAPHY.fonts.body,
-    color: COLORS.secondary,
-    textAlign: "center",
-    marginBottom: 30,
-    textShadowColor: "rgba(74, 112, 74, 0.5)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  input: {
-    width: "80%",
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: COLORS.secondary,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    color: COLORS.text.primary,
-    fontFamily: TYPOGRAPHY.fonts.body,
-    fontSize: TYPOGRAPHY.sizes.body,
+    fontSize: 24,
+    fontWeight: "bold",
     marginBottom: 20,
     textAlign: "center",
   },
   label: {
-    fontSize: TYPOGRAPHY.sizes.body,
-    fontFamily: TYPOGRAPHY.fonts.bold,
-    color: COLORS.text.primary,
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 5,
+    marginTop: 10,
+  },
+  input: {
+    width: "100%",
+    height: 40,
+    borderColor: "#ccc",
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+    backgroundColor: "#fff",
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: "top",
+    paddingTop: 10,
+  },
+  profilePicture: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignSelf: "center",
     marginBottom: 10,
   },
-  buttonWrapper: {
-    borderRadius: 25,
-    overflow: "hidden",
-    marginTop: 20,
+  profilePicturePlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#ccc",
+    alignSelf: "center",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
   },
-  buttonContainer: {
-    borderRadius: 25,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    borderWidth: 2,
-    borderColor: COLORS.secondary,
+  placeholderText: {
+    color: "#fff",
+    fontSize: 12,
+    textAlign: "center",
   },
-  button: {
-    paddingVertical: 15,
-    paddingHorizontal: 40,
-    borderRadius: 25,
+  uploadButton: {
+    backgroundColor: "#007AFF",
+    padding: 10,
+    borderRadius: 5,
+    marginBottom: 20,
+    alignItems: "center",
   },
-  buttonText: {
-    fontSize: 18,
-    fontFamily: TYPOGRAPHY.fonts.bold,
-    color: COLORS.text.dark,
+  uploadButtonText: {
+    color: "#fff",
+    fontSize: 16,
   },
 });
