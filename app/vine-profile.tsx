@@ -3,12 +3,14 @@ import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, StyleSheet, Image, TouchableOpacity, Alert, ScrollView, ActivityIndicator } from "react-native";
 import { Button } from "react-native-elements";
 import { LinearGradient } from "expo-linear-gradient";
-import { supabase } from "../../supabase";
+import { supabase } from "../supabase";
+import { useDemoData } from "../components/DemoDataContext";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { COLORS, TYPOGRAPHY } from "../../constants/theme";
+import { COLORS, TYPOGRAPHY } from "../constants/theme";
 
 export default function VineProfile() {
+  const { demoMode, vines } = useDemoData();
   const [loading, setLoading] = useState(true);
   const [isCoordinator, setIsCoordinator] = useState(false);
   const [vine, setVine] = useState<any>(null);
@@ -22,18 +24,39 @@ export default function VineProfile() {
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
+    if (demoMode && vines.length > 0) {
+      const demo = vines[0];
+      setVine(demo);
+      setLogoUrl(null);
+      setName(demo.name);
+      setDescription(demo.description ?? "");
+      setLocation(demo.location ?? "");
+      setContactEmail("");
+      setWebsite("");
+      setJoinCode(demo.join_code ?? "");
+      setIsCoordinator(true);
+      setLoading(false);
+      return;
+    }
     const fetchVine = async () => {
       setLoading(true);
       try {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user) throw new Error("Not logged in");
-        // Find vine where user is coordinator
+        // Get user's profile to find their vine_id
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("vine_id")
+          .eq("user_id", user.id)
+          .single();
+        if (profileError || !profile || !profile.vine_id) throw new Error("No vine found for your account");
+        // Fetch the vine by vine_id
         const { data: vineData, error: vineError } = await supabase
           .from("vines")
           .select("*")
-          .eq("coordinator_id", user.id)
+          .eq("vine_id", profile.vine_id)
           .single();
-        if (vineError || !vineData) throw new Error("No vine found for this coordinator");
+        if (vineError || !vineData) throw new Error("No vine found for your account");
         setVine(vineData);
         setLogoUrl(vineData.logo_url || null);
         setName(vineData.name || "");
@@ -42,7 +65,8 @@ export default function VineProfile() {
         setContactEmail(vineData.contact_email || "");
         setWebsite(vineData.website || "");
         setJoinCode(vineData.join_code || "");
-        setIsCoordinator(true);
+        // Check if user is coordinator
+        setIsCoordinator(vineData.coordinator_id === user.id);
       } catch (err) {
         setIsCoordinator(false);
         setVine(null);

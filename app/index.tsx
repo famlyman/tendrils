@@ -14,6 +14,7 @@ import { COLORS, TYPOGRAPHY, STYLES, ICONS } from "../constants/theme";
 // Import the BackgroundWrapper
 import BackgroundWrapper from "../components/BackgroundWrapper";
 import { LinearGradient } from "expo-linear-gradient";
+import { useDemoData } from "../components/DemoDataContext";
 
 export default function LandingPage() {
   const [fontsLoaded] = useFonts({
@@ -21,6 +22,7 @@ export default function LandingPage() {
     "Roboto-Regular": require("../assets/fonts/Roboto-Regular.ttf"),
     "Roboto-Bold": require("../assets/fonts/Roboto-Bold.ttf"),
   });
+  const { setDemoMode } = useDemoData();
 
 // app/index.tsx (relevant parts)
 useEffect(() => {
@@ -146,7 +148,7 @@ const handleGetStarted = async () => {
               animation="fadeInUp"
               duration={1000}
               delay={1200}
-              style={[styles.buttonWrapper, styles.getStartedButton]} // Add spacing
+              style={[styles.buttonWrapper, styles.getStartedButton]}
             >
               <Button
                 title="Get Started"
@@ -157,6 +159,37 @@ const handleGetStarted = async () => {
                 ViewComponent={LinearGradient}
                 linearGradientProps={{
                   colors: COLORS.buttonGradient,
+                  start: { x: 0, y: 0 },
+                  end: { x: 1, y: 0 },
+                }}
+              />
+            </Animatable.View>
+
+            {/* Try Demo Mode Button */}
+            <Animatable.View
+              animation="fadeInUp"
+              duration={1000}
+              delay={1300}
+              style={[styles.buttonWrapper, { marginBottom: 8 }]}
+            >
+              <Button
+                title="Try Demo Mode"
+                type="outline"
+                onPress={async () => {
+                  setDemoMode(true);
+                  router.replace("/(tabs)/home");
+                }}
+                buttonStyle={{
+                  borderColor: COLORS.secondary,
+                  borderWidth: 2,
+                  borderRadius: 18,
+                  paddingVertical: 12,
+                }}
+                titleStyle={styles.secondaryButtonText}
+                containerStyle={styles.buttonContainer}
+                ViewComponent={LinearGradient}
+                linearGradientProps={{
+                  colors: ['#FFECB3', '#FFD54F'],
                   start: { x: 0, y: 0 },
                   end: { x: 1, y: 0 },
                 }}
@@ -201,55 +234,59 @@ const handleGetStarted = async () => {
 const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     alignItems: "center",
-    paddingVertical: 40,
-    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 12,
+    minHeight: '100%',
   },
   illustration: {
-    width: 150,
-    height: 150,
-    marginBottom: 20,
+    width: 110,
+    height: 110,
+    marginBottom: 10,
+    marginTop: 8,
   },
   title: {
-    fontSize: TYPOGRAPHY.sizes.landing.title, // 60
-    fontFamily: TYPOGRAPHY.fonts.heading, // AmaticSC-Bold
-    color: COLORS.text.dark, // #1A3C34
+    fontSize: TYPOGRAPHY.sizes.landing.title,
+    fontFamily: TYPOGRAPHY.fonts.heading,
+    color: COLORS.text.dark,
     textAlign: "center",
     textShadowColor: "rgba(0, 0, 0, 0.4)",
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 6,
-    marginBottom: 15,
+    marginBottom: 8,
+    marginTop: 0,
   },
   tagline: {
-    fontSize: TYPOGRAPHY.sizes.landing.tagline, // 28
-    fontFamily: TYPOGRAPHY.fonts.body, // Roboto-Regular
-    color: COLORS.secondary, // #FFD54F
+    fontSize: TYPOGRAPHY.sizes.landing.tagline,
+    fontFamily: TYPOGRAPHY.fonts.body,
+    color: COLORS.secondary,
     textAlign: "center",
-    marginBottom: 15,
+    marginBottom: 8,
     letterSpacing: TYPOGRAPHY.letterSpacing.heading,
     textShadowColor: "rgba(74, 112, 74, 0.5)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
   },
   callToAction: {
-    fontSize: TYPOGRAPHY.sizes.landing.callToAction, // 24
-    fontFamily: TYPOGRAPHY.fonts.bold, // Roboto-Bold
-    color: COLORS.text.primary, // #FFFFFF
+    fontSize: TYPOGRAPHY.sizes.landing.callToAction,
+    fontFamily: TYPOGRAPHY.fonts.bold,
+    color: COLORS.text.primary,
     textAlign: "center",
-    marginBottom: 30,
-    maxWidth: "85%",
+    marginBottom: 16,
+    maxWidth: "90%",
     textShadowColor: "rgba(74, 112, 74, 0.5)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
   },
   footer: {
     alignItems: "center",
-    marginBottom: 15,
+    marginBottom: 8,
+    marginTop: 10,
   },
   footerTextContainer: {
-    marginBottom: 20,
-    maxWidth: "90%",
+    marginBottom: 10,
+    maxWidth: "95%",
   },
   footerText: {
     fontSize: TYPOGRAPHY.sizes.small, // 14
@@ -274,14 +311,18 @@ const styles = StyleSheet.create({
   },
   buttonSection: {
     alignItems: "center",
-    marginBottom: 15,
+    marginBottom: 2,
+    marginTop: 2,
+    width: '100%',
   },
   buttonWrapper: {
     borderRadius: 25,
     overflow: "hidden",
+    width: '100%',
+    marginBottom: 8,
   },
   getStartedButton: {
-    marginBottom: 15, // Add spacing between buttons
+    marginBottom: 8,
   },
   buttonContainer: {
     borderRadius: 25,
@@ -291,7 +332,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 5,
     borderWidth: 2,
-    borderColor: COLORS.secondary, // #FFD54F
+    borderColor: COLORS.secondary,
+    width: '100%',
+    minWidth: 210,
+    maxWidth: 340,
+    alignSelf: 'center',
+    marginBottom: 0,
   },
   button: {
     paddingVertical: 15,
@@ -312,6 +358,11 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     borderWidth: 1,
     borderColor: COLORS.secondary,
+    width: '100%',
+    minWidth: 210,
+    maxWidth: 340,
+    alignSelf: 'center',
+    marginBottom: 0,
   },
   secondaryButton: {
     paddingVertical: 12,

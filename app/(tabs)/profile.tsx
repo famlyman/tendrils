@@ -6,11 +6,16 @@ import { Button } from "react-native-elements";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../../supabase";
+import { useDemoData } from "../../components/DemoDataContext";
 import * as Animatable from "react-native-animatable";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import * as ImagePicker from "expo-image-picker";
 
+import { useRouter } from "expo-router";
+
 export default function Profile() {
+  const { demoMode, profiles } = useDemoData();
+  const router = useRouter();
   const [session, setSession] = useState<any>(null);
   const [name, setName] = useState<string>("");
   const [rating, setRating] = useState<number | null>(null); // New field for rating
@@ -28,7 +33,24 @@ export default function Profile() {
   const logoutButtonRef = useRef<any>(null);
   const loginButtonRef = useRef<any>(null);
 
+  // Handler for club info
+  const handleViewClub = () => {
+    router.push("/vine-profile-screen");
+  };
+
   useEffect(() => {
+    if (demoMode && profiles.length > 0) {
+      // Use the first demo profile as the "user"
+      const demo = profiles[0];
+      setName(demo.name);
+      setRating(demo.rating ?? null);
+      setProfilePicture(null);
+      setRoles([demo.role]);
+      setBio(demo.bio ?? "");
+      setPhone("");
+      setLoading(false);
+      return;
+    }
     const fetchUserData = async () => {
       try {
         console.log("[Profile] Fetching user data...");
@@ -304,6 +326,21 @@ export default function Profile() {
     <LinearGradient colors={["#A8E6CF", "#4A704A"]} style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#4A704A" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Button
+          title="View Club Info"
+          onPress={handleViewClub}
+          buttonStyle={{
+            backgroundColor: "#FFD54F",
+            borderRadius: 20,
+            marginVertical: 12,
+          }}
+          titleStyle={{
+            color: "#1A3C34",
+            fontFamily: "Roboto-Bold",
+            fontSize: 17,
+          }}
+          containerStyle={{ alignSelf: "center", width: 180 }}
+        />
         <Animatable.View animation="fadeIn" duration={1000} style={styles.content}>
           {profilePicture ? (
             <Image source={{ uri: profilePicture }} style={styles.profilePicture} />

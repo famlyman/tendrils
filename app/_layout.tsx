@@ -3,6 +3,8 @@ import { Stack } from "expo-router";
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { DemoDataProvider } from "../components/DemoDataContext";
+// TODO: Remove Vine Profile and Players from tab navigator, add Recent Matches tab. This will be done in the tab navigator component, not here.
 
 export default function RootLayout() {
   const [session, setSession] = useState<any>(null);
@@ -35,12 +37,13 @@ export default function RootLayout() {
   if (loading) return null;
 
   return (
+    <DemoDataProvider>
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="login" />
-      <Stack.Screen name="team-creation" />
       <Stack.Screen name="(tabs)" />
     </Stack>
+    </DemoDataProvider>
   );
 }
