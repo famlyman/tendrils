@@ -35,7 +35,7 @@ export default function Profile() {
 
   // Handler for club info
   const handleViewClub = () => {
-    router.push("/vine-profile-screen");
+    router.push("/vine-profile");
   };
 
   useEffect(() => {

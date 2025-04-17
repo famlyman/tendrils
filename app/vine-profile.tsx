@@ -6,7 +6,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../supabase";
 import { useDemoData } from "../components/DemoDataContext";
 import * as ImagePicker from "expo-image-picker";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { COLORS, TYPOGRAPHY } from "../constants/theme";
 
 export default function VineProfile() {

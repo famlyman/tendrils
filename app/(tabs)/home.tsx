@@ -17,7 +17,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 export default function Home() {
   // TODO: Replace with actual current user id from auth context
   const currentUserId = "user-1";
-  const [challengeTarget, setChallengeTarget] = React.useState<PlayerProfile|null>(null);
+  const [challengeTarget, setChallengeTarget] = React.useState<ChallengeTarget>(null);
   const { demoMode, standings, teams, profiles, addDemoTeam } = useDemoData();
   const router = useRouter();
   const [segment, setSegment] = React.useState("Singles");
@@ -32,6 +32,17 @@ export default function Home() {
     losses?: number;
     [key: string]: any;
   }
+  interface TeamProfile {
+    team_id: string;
+    name: string;
+    members: string[];
+    wins: number;
+    losses: number;
+    win_percentage: number;
+    [key: string]: any;
+  }
+  type ChallengeTarget = PlayerProfile | TeamProfile | null;
+
   // Merge in wins/losses from demoProfiles for each player in standings
   const rankingData: PlayerProfile[] = currentStandings
     ? currentStandings.rankings.map((p: any) => {
@@ -50,6 +61,75 @@ export default function Home() {
 
   return (
     <BackgroundWrapper>
+      {/* Settings Button */}
+      <TouchableOpacity
+        style={{
+          position: 'absolute',
+          top: 32,
+          right: 24,
+          zIndex: 100,
+          backgroundColor: '#fff',
+          borderRadius: 20,
+          padding: 6,
+          elevation: 3,
+        }}
+        onPress={() => router.push('/settings')}
+      >
+        <MaterialIcons name="settings" size={28} color={COLORS.secondary} />
+      </TouchableOpacity>
+      {/* Challenge Modal at top level */}
+      {challengeTarget && (
+        <Modal
+          visible={!!challengeTarget}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setChallengeTarget(null)}
+        >
+          <View style={{flex:1, justifyContent:'center', alignItems:'center', backgroundColor:'rgba(0,0,0,0.4)'}}>
+            <View style={{backgroundColor:'#fff', padding:24, borderRadius:12, minWidth:260, alignItems:'center'}}>
+              <Text style={{fontSize:18, fontWeight:'bold', marginBottom:8}}>
+                Challenge {challengeTarget.name}?
+              </Text>
+              {"user_id" in challengeTarget ? (
+                // Singles modal
+                <>
+                  <Text style={{fontSize:15, marginBottom:4}}>
+                    Rank: {rankingData.findIndex(p => p.user_id === challengeTarget.user_id) + 1}   Rating: {challengeTarget.rating}
+                  </Text>
+                  <Text style={{fontSize:15, marginBottom:16}}>
+                    W-L: {challengeTarget.wins ?? 0}-{challengeTarget.losses ?? 0}  Win%: {challengeTarget.wins !== undefined && challengeTarget.losses !== undefined && (challengeTarget.wins + challengeTarget.losses) > 0 ? Math.round((challengeTarget.wins / (challengeTarget.wins + challengeTarget.losses)) * 100) : 0}%
+                  </Text>
+                </>
+              ) : (
+                // Doubles modal
+                <>
+                  <Text style={{fontSize:15, marginBottom:4}}>
+                    Members: {challengeTarget.members.map((id: string) => {
+                      const p = profiles.find((pr: any) => pr.user_id === id);
+                      return p ? p.name : id;
+                    }).join(", ")}
+                  </Text>
+                  <Text style={{fontSize:15, marginBottom:16}}>
+                    W-L: {challengeTarget.wins ?? 0}-{challengeTarget.losses ?? 0}  Win%: {challengeTarget.win_percentage !== undefined ? (challengeTarget.win_percentage * 100).toFixed(0) : 0}%
+                  </Text>
+                </>
+              )}
+              <View style={{flexDirection:'row', gap: 16}}>
+                <TouchableOpacity
+                  style={{paddingVertical:8, paddingHorizontal:18, backgroundColor:COLORS.primaryGradient[1], borderRadius:8, marginRight:8}}
+                  onPress={() => {/* TODO: implement challenge logic */ setChallengeTarget(null);}}>
+                  <Text style={{color:'#fff', fontWeight:'bold'}}>Send Challenge</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{paddingVertical:8, paddingHorizontal:18, backgroundColor:'#eee', borderRadius:8}}
+                  onPress={() => setChallengeTarget(null)}>
+                  <Text style={{color:COLORS.secondary, fontWeight:'bold'}}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
       <View style={styles.container}>
         <View style={styles.segmentedControl}>
           {SEGMENTS.map(s => (
@@ -62,10 +142,6 @@ export default function Home() {
             </TouchableOpacity>
           ))}
         </View>
-        {/* Hamburger menu */}
-        <TouchableOpacity style={styles.menuButton} onPress={() => router.push('/app/settings')}>
-          <MaterialIcons name="menu" size={32} color={COLORS.text.dark} />
-        </TouchableOpacity>
 
         {demoMode ? (
           segment === "Singles" ? (
@@ -99,24 +175,6 @@ export default function Home() {
               )}
               style={{ marginTop: 16 }}
             />
-            {/* Challenge Modal */}
-            {challengeTarget && (
-            <Modal
-              visible={!!challengeTarget}
-              transparent
-              animationType="slide"
-              onRequestClose={() => setChallengeTarget(null)}
-            >
-              <View style={{flex:1, justifyContent:'center', alignItems:'center', backgroundColor:'rgba(0,0,0,0.4)'}}>
-                <View style={{backgroundColor:'#fff', padding:24, borderRadius:12, minWidth:260, alignItems:'center'}}>
-                  <Text style={{fontSize:18, fontWeight:'bold', marginBottom:12}}>Challenge {challengeTarget.name}?</Text>
-                  <TouchableOpacity style={{marginTop:18}} onPress={() => setChallengeTarget(null)}>
-                    <Text style={{color:COLORS.secondary, fontWeight:'bold'}}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </Modal>
-            )}
             </>
           ) : (
             <>
@@ -130,21 +188,38 @@ export default function Home() {
                 data={doublesStandings}
                 showsVerticalScrollIndicator={false}
                 keyExtractor={item => item.team_id}
-                renderItem={({ item, index }) => (
-                  <View style={styles.doublesCard}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                      <Text style={styles.rank}>{index + 1}.</Text>
-                      <Text style={[styles.name, { fontWeight: 'bold', fontSize: 17, marginLeft: 8 }]}>{item.name}</Text>
+                renderItem={({ item, index }) => {
+                  // Check if current user is a member of this team
+                  const isMyTeam = item.members.includes(currentUserId);
+                  return (
+                    <View style={styles.doublesCard}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                        <Text style={styles.rank}>{index + 1}.</Text>
+                        <Text style={[styles.name, { fontWeight: 'bold', fontSize: 17, marginLeft: 8 }]}>{item.name}</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={{ color: COLORS.primaryGradient[1], fontSize: 15, marginBottom: 2 }}>
+                          Members: {item.members.map((id: string) => {
+                            const p = profiles.find(p => p.user_id === id);
+                            return p ? p.name : id;
+                          }).join(", ")}
+                        </Text>
+                        {!isMyTeam && (
+                          <TouchableOpacity
+                            style={styles.challengeBtn}
+                            onPress={() => setChallengeTarget(item)}
+                            hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+                          >
+                            <MaterialCommunityIcons name="sword-cross" size={24} color={COLORS.primaryGradient[1]} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      <Text style={{ color: COLORS.secondary, fontSize: 16, fontWeight: 'bold', marginTop: 4 }}>
+                        W-L: {item.wins}-{item.losses}  Win%: {(item.win_percentage * 100).toFixed(0)}%
+                      </Text>
                     </View>
-                    <Text style={{ color: COLORS.primaryGradient[1], fontSize: 15, marginBottom: 2 }}>Members: {item.members.map((id: string) => {
-                      const p = profiles.find(p => p.user_id === id);
-                      return p ? p.name : id;
-                    }).join(", ")}</Text>
-                    <Text style={{ color: COLORS.secondary, fontSize: 16, fontWeight: 'bold', marginTop: 4 }}>
-                      W-L: {item.wins}-{item.losses}  Win%: {(item.win_percentage * 100).toFixed(0)}%
-                    </Text>
-                  </View>
-                )}
+                  );
+                }}
                 style={{ marginTop: 16 }}
                 ListEmptyComponent={<Text style={{color: 'red', textAlign: 'center'}}>No teams found for this club.</Text>}
               />
