@@ -4,12 +4,12 @@ import { View, Text, TextInput, StyleSheet, Image, TouchableOpacity, Alert, Scro
 import { Button } from "react-native-elements";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../supabase";
-import { useDemoData } from "../components/DemoDataContext";
+
 import * as ImagePicker from "expo-image-picker";
 import { COLORS, TYPOGRAPHY } from "../constants/theme";
 
 export default function VineProfile() {
-  const { demoMode, vines } = useDemoData();
+
   const [loading, setLoading] = useState(true);
   const [isCoordinator, setIsCoordinator] = useState(false);
   const [vine, setVine] = useState<any>(null);
@@ -23,20 +23,7 @@ export default function VineProfile() {
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
-    if (demoMode && vines.length > 0) {
-      const demo = vines[0];
-      setVine(demo);
-      setLogoUrl(null);
-      setName(demo.name);
-      setDescription(demo.description ?? "");
-      setLocation(demo.location ?? "");
-      setContactEmail("");
-      setWebsite("");
-      setJoinCode(demo.join_code ?? "");
-      setIsCoordinator(true);
-      setLoading(false);
-      return;
-    }
+
     const fetchVine = async () => {
       setLoading(true);
       try {

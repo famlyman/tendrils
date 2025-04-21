@@ -14,7 +14,7 @@ import { COLORS, TYPOGRAPHY, STYLES, ICONS } from "../constants/theme";
 // Import the BackgroundWrapper
 import BackgroundWrapper from "../components/BackgroundWrapper";
 import { LinearGradient } from "expo-linear-gradient";
-import { useDemoData } from "../components/DemoDataContext";
+
 
 export default function LandingPage() {
   const [fontsLoaded] = useFonts({
@@ -22,7 +22,7 @@ export default function LandingPage() {
     "Roboto-Regular": require("../assets/fonts/Roboto-Regular.ttf"),
     "Roboto-Bold": require("../assets/fonts/Roboto-Bold.ttf"),
   });
-  const { setDemoMode } = useDemoData();
+
 
 // app/index.tsx (relevant parts)
 useEffect(() => {
@@ -159,37 +159,6 @@ const handleGetStarted = async () => {
                 ViewComponent={LinearGradient}
                 linearGradientProps={{
                   colors: COLORS.buttonGradient,
-                  start: { x: 0, y: 0 },
-                  end: { x: 1, y: 0 },
-                }}
-              />
-            </Animatable.View>
-
-            {/* Try Demo Mode Button */}
-            <Animatable.View
-              animation="fadeInUp"
-              duration={1000}
-              delay={1300}
-              style={[styles.buttonWrapper, { marginBottom: 8 }]}
-            >
-              <Button
-                title="Try Demo Mode"
-                type="outline"
-                onPress={async () => {
-                  setDemoMode(true);
-                  router.replace("/(tabs)/home");
-                }}
-                buttonStyle={{
-                  borderColor: COLORS.secondary,
-                  borderWidth: 2,
-                  borderRadius: 18,
-                  paddingVertical: 12,
-                }}
-                titleStyle={styles.secondaryButtonText}
-                containerStyle={styles.buttonContainer}
-                ViewComponent={LinearGradient}
-                linearGradientProps={{
-                  colors: ['#FFECB3', '#FFD54F'],
                   start: { x: 0, y: 0 },
                   end: { x: 1, y: 0 },
                 }}

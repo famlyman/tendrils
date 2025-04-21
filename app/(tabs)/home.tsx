@@ -1,83 +1,282 @@
 // app/(tabs)/home.tsx
-import React from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal } from "react-native";
-import BackgroundWrapper from "../../components/BackgroundWrapper";
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Alert } from "react-native";
 import { COLORS, TYPOGRAPHY } from "../../constants/theme";
-import { useDemoData } from "../../components/DemoDataContext";
-
+import { supabase } from "../../supabase";
 import { useRouter } from "expo-router";
-import { Tabs } from "expo-router";
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import BackgroundWrapper from "../../components/BackgroundWrapper";
 import CreateTeamModal from "../../components/CreateTeamModal";
 
 const SEGMENTS = ["Singles", "Doubles"];
 
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+interface PlayerProfile {
+  user_id: string;
+  name: string;
+  rating: number;
+  wins: number;
+  losses: number;
+  position: number;
+}
+
+interface TeamProfile {
+  team_id: string;
+  name: string;
+  members: string[];
+  wins: number;
+  losses: number;
+  position: number;
+}
+
+type ChallengeTarget = PlayerProfile | TeamProfile | null;
 
 export default function Home() {
-  // TODO: Replace with actual current user id from auth context
-  const currentUserId = "user-1";
-  const [challengeTarget, setChallengeTarget] = React.useState<ChallengeTarget>(null);
-  const { demoMode, standings, teams, profiles, addDemoTeam } = useDemoData();
+  const [challengeTarget, setChallengeTarget] = useState<ChallengeTarget>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [segment, setSegment] = useState("Singles");
+  const [singlesStandings, setSinglesStandings] = useState<PlayerProfile[]>([]);
+  const [doublesStandings, setDoublesStandings] = useState<TeamProfile[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [vineId, setVineId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [userTeams, setUserTeams] = useState<string[]>([]); // Track user's teams for doubles
   const router = useRouter();
-  const [segment, setSegment] = React.useState("Singles");
-  const [modalVisible, setModalVisible] = React.useState(false);
-  // For demo: pick the first vine's standings (or use a selected vine id if you have one)
-  const currentStandings = demoMode ? standings[0] : null;
-  interface PlayerProfile {
-    user_id: string;
-    name: string;
-    rating: number;
-    wins?: number;
-    losses?: number;
-    [key: string]: any;
-  }
-  interface TeamProfile {
-    team_id: string;
-    name: string;
-    members: string[];
-    wins: number;
-    losses: number;
-    win_percentage: number;
-    [key: string]: any;
-  }
-  type ChallengeTarget = PlayerProfile | TeamProfile | null;
 
-  // Merge in wins/losses from demoProfiles for each player in standings
-  const rankingData: PlayerProfile[] = currentStandings
-    ? currentStandings.rankings.map((p: any) => {
-        const profile = profiles.find((pr: any) => pr.user_id === p.user_id);
-        return {
-          ...p,
-          wins: profile?.wins ?? 0,
-          losses: profile?.losses ?? 0,
-        };
-      })
-    : [];
-  // For doubles: use teamStandings from context for the current vine
-  const { teamStandings } = useDemoData();
-  const currentVineId = currentStandings ? currentStandings.vine_id : null;
-  const doublesStandings = demoMode && currentVineId ? teamStandings.find(t => t.vine_id === currentVineId)?.rankings || [] : [];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          router.replace("/login");
+          return;
+        }
+        setCurrentUserId(session.user.id);
+
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("vine_id")
+          .eq("user_id", session.user.id)
+          .single();
+
+        if (profileError || !profile?.vine_id) {
+          Alert.alert("Error", "You must join a vine first.");
+          setLoading(false);
+          return;
+        }
+        setVineId(profile.vine_id);
+
+        // Fetch singles standings
+        const { data: singlesData, error: singlesError } = await supabase
+          .from("user_ladder_nodes")
+          .select(`
+            user_id,
+            position,
+            profiles (name, rating),
+            fruit_records (wins, losses)
+          `)
+          .eq("vine_id", profile.vine_id)
+          .is("team_id", null)
+          .order("position", { ascending: true });
+
+        if (singlesError) {
+          console.log("Error fetching singles standings:", singlesError.message);
+          Alert.alert("Error", "Failed to load singles standings.");
+          return;
+        }
+
+        const singles = singlesData.map((item: any) => ({
+          user_id: item.user_id,
+          name: item.profiles.name,
+          rating: item.profiles.rating,
+          wins: item.fruit_records?.wins || 0,
+          losses: item.fruit_records?.losses || 0,
+          position: item.position,
+        }));
+        setSinglesStandings(singles);
+
+        // Fetch doubles standings
+        const { data: doublesData, error: doublesError } = await supabase
+          .from("user_ladder_nodes")
+          .select(`
+            team_id,
+            position,
+            teams (name),
+            fruit_records (wins, losses)
+          `)
+          .eq("vine_id", profile.vine_id)
+          .is("user_id", null)
+          .order("position", { ascending: true });
+
+        if (doublesError) {
+          console.log("Error fetching doubles standings:", doublesError.message);
+          Alert.alert("Error", "Failed to load doubles standings.");
+          return;
+        }
+
+        const teamsData = await Promise.all(
+          doublesData.map(async (item: any) => {
+            const { data: membersData } = await supabase
+              .from("team_members")
+              .select("user_id, profiles!user_id (name)")
+              .eq("team_id", item.team_id);
+
+            const members = membersData?.map((m: any) => m.profiles.name) || [];
+            return {
+              team_id: item.team_id,
+              name: item.teams.name,
+              members,
+              wins: item.fruit_records?.wins || 0,
+              losses: item.fruit_records?.losses || 0,
+              position: item.position,
+            };
+          })
+        );
+        setDoublesStandings(teamsData);
+
+        // Fetch user's teams
+        const { data: userTeamsData } = await supabase
+          .from("team_members")
+          .select("team_id")
+          .eq("user_id", session.user.id);
+
+        setUserTeams(userTeamsData?.map((t: any) => t.team_id) || []);
+      } catch (e) {
+        console.log("Unexpected error:", e);
+        Alert.alert("Error", "An unexpected error occurred.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  // Accepts the object from CreateTeamModal and extracts partnerId from members[1]
+  const handleCreateTeam = async (team: { team_id: string; name: string; members: string[] }) => {
+    try {
+      if (!vineId || !currentUserId || !team.members[1]) {
+        Alert.alert("Error", "Missing information for team creation.");
+        return;
+      }
+      const partnerId = team.members[1];
+      const { data: teamData, error: teamError } = await supabase
+        .from("teams")
+        .insert({ vine_id: vineId, name: team.name })
+        .select()
+        .single();
+
+      if (teamError) throw teamError;
+
+      // Add current user and partner to the team
+      await supabase
+        .from("team_members")
+        .insert([
+          { team_id: teamData.team_id, user_id: currentUserId },
+          { team_id: teamData.team_id, user_id: partnerId },
+        ]);
+
+      // Add team to the ladder
+      const { data: nodeData } = await supabase
+        .from("ladder_nodes")
+        .insert({
+          vine_id: vineId,
+          position: (
+            await supabase
+              .from("ladder_nodes")
+              .select("position")
+              .eq("vine_id", vineId)
+              .order("position", { ascending: false })
+              .limit(1)
+              .single()
+          ).data?.position + 1 || 1,
+        })
+        .select()
+        .single();
+
+      await supabase
+        .from("user_ladder_nodes")
+        .insert({
+          node_id: nodeData.node_id,
+          team_id: teamData.team_id,
+          vine_id: vineId,
+          position: nodeData.position,
+        });
+
+      // Fetch member names before updating state
+      const currentUserName = (await supabase.from("profiles").select("name").eq("user_id", currentUserId).single()).data?.name;
+      const partnerName = (await supabase.from("profiles").select("name").eq("user_id", partnerId).single()).data?.name;
+      setDoublesStandings([...doublesStandings, {
+        team_id: teamData.team_id,
+        name: teamData.name,
+        members: [currentUserName, partnerName],
+        wins: 0,
+        losses: 0,
+        position: nodeData.position,
+      }]);
+      setUserTeams([...userTeams, teamData.team_id]);
+      setUserTeams((prev) => [...prev, teamData.team_id]);
+      setModalVisible(false);
+    } catch (e) {
+      console.log("Error creating team:", e);
+      Alert.alert("Error", "Failed to create team.");
+    }
+  };
+
+
+  const handleChallenge = async () => {
+    if (!challengeTarget || !vineId || !currentUserId) return;
+
+    try {
+      if ("user_id" in challengeTarget) {
+        // Singles challenge
+        const { data, error } = await supabase.rpc("create_challenge", {
+          p_challenger_id: currentUserId,
+          p_opponent_id: challengeTarget.user_id,
+          p_vine_id: vineId,
+        });
+
+        if (error) {
+          console.log("Error creating singles challenge:", error.message);
+          Alert.alert("Error", error.message);
+        } else {
+          Alert.alert("Success", "Challenge sent!");
+        }
+      } else {
+        // Doubles challenge
+        // Find a team that the current user belongs to
+        if (userTeams.length === 0) {
+          Alert.alert("Error", "You must be part of a team to challenge in doubles.");
+          return;
+        }
+
+        const { data, error } = await supabase.rpc("create_challenge", {
+          p_team_1_id: userTeams[0], // Use the first team the user belongs to
+          p_team_2_id: challengeTarget.team_id,
+          p_vine_id: vineId,
+        });
+
+        if (error) {
+          console.log("Error creating doubles challenge:", error.message);
+          Alert.alert("Error", error.message);
+        } else {
+          Alert.alert("Success", "Team challenge sent!");
+        }
+      }
+    } catch (e) {
+      console.log("Unexpected error:", e);
+      Alert.alert("Error", "Failed to send challenge.");
+    } finally {
+      setChallengeTarget(null);
+    }
+  };
+
+  if (loading) {
+    return <Text>Loading...</Text>;
+  }
 
   return (
     <BackgroundWrapper>
-      {/* Settings Button */}
-      <TouchableOpacity
-        style={{
-          position: 'absolute',
-          top: 32,
-          right: 24,
-          zIndex: 100,
-          backgroundColor: '#fff',
-          borderRadius: 20,
-          padding: 6,
-          elevation: 3,
-        }}
-        onPress={() => router.push('/settings')}
-      >
-        <MaterialIcons name="settings" size={28} color={COLORS.secondary} />
-      </TouchableOpacity>
-      {/* Challenge Modal at top level */}
+
+      {/* Challenge Modal */}
       {challengeTarget && (
         <Modal
           visible={!!challengeTarget}
@@ -85,45 +284,44 @@ export default function Home() {
           animationType="slide"
           onRequestClose={() => setChallengeTarget(null)}
         >
-          <View style={{flex:1, justifyContent:'center', alignItems:'center', backgroundColor:'rgba(0,0,0,0.4)'}}>
-            <View style={{backgroundColor:'#fff', padding:24, borderRadius:12, minWidth:260, alignItems:'center'}}>
-              <Text style={{fontSize:18, fontWeight:'bold', marginBottom:8}}>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' }}>
+            <View style={{ backgroundColor: '#fff', padding: 24, borderRadius: 12, minWidth: 260, alignItems: 'center' }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 8 }}>
                 Challenge {challengeTarget.name}?
               </Text>
               {"user_id" in challengeTarget ? (
                 // Singles modal
                 <>
-                  <Text style={{fontSize:15, marginBottom:4}}>
-                    Rank: {rankingData.findIndex(p => p.user_id === challengeTarget.user_id) + 1}   Rating: {challengeTarget.rating}
+                  <Text style={{ fontSize: 15, marginBottom: 4 }}>
+                    Rank: {challengeTarget.position}   Rating: {challengeTarget.rating}
                   </Text>
-                  <Text style={{fontSize:15, marginBottom:16}}>
-                    W-L: {challengeTarget.wins ?? 0}-{challengeTarget.losses ?? 0}  Win%: {challengeTarget.wins !== undefined && challengeTarget.losses !== undefined && (challengeTarget.wins + challengeTarget.losses) > 0 ? Math.round((challengeTarget.wins / (challengeTarget.wins + challengeTarget.losses)) * 100) : 0}%
+                  <Text style={{ fontSize: 15, marginBottom: 16 }}>
+                    W-L: {challengeTarget.wins}-{challengeTarget.losses}  Win%: {(challengeTarget.wins + challengeTarget.losses) > 0 ? Math.round((challengeTarget.wins / (challengeTarget.wins + challengeTarget.losses)) * 100) : 0}%
                   </Text>
                 </>
               ) : (
                 // Doubles modal
                 <>
-                  <Text style={{fontSize:15, marginBottom:4}}>
-                    Members: {challengeTarget.members.map((id: string) => {
-                      const p = profiles.find((pr: any) => pr.user_id === id);
-                      return p ? p.name : id;
-                    }).join(", ")}
+                  <Text style={{ fontSize: 15, marginBottom: 4 }}>
+                    Members: {challengeTarget.members.join(", ")}
                   </Text>
-                  <Text style={{fontSize:15, marginBottom:16}}>
-                    W-L: {challengeTarget.wins ?? 0}-{challengeTarget.losses ?? 0}  Win%: {challengeTarget.win_percentage !== undefined ? (challengeTarget.win_percentage * 100).toFixed(0) : 0}%
+                  <Text style={{ fontSize: 15, marginBottom: 16 }}>
+                    W-L: {challengeTarget.wins}-{challengeTarget.losses}  Win%: {(challengeTarget.wins + challengeTarget.losses) > 0 ? Math.round((challengeTarget.wins / (challengeTarget.wins + challengeTarget.losses)) * 100) : 0}%
                   </Text>
                 </>
               )}
-              <View style={{flexDirection:'row', gap: 16}}>
+              <View style={{ flexDirection: 'row', gap: 16 }}>
                 <TouchableOpacity
-                  style={{paddingVertical:8, paddingHorizontal:18, backgroundColor:COLORS.primaryGradient[1], borderRadius:8, marginRight:8}}
-                  onPress={() => {/* TODO: implement challenge logic */ setChallengeTarget(null);}}>
-                  <Text style={{color:'#fff', fontWeight:'bold'}}>Send Challenge</Text>
+                  style={{ paddingVertical: 8, paddingHorizontal: 18, backgroundColor: COLORS.primaryGradient[1], borderRadius: 8, marginRight: 8 }}
+                  onPress={handleChallenge}
+                >
+                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>Send Challenge</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={{paddingVertical:8, paddingHorizontal:18, backgroundColor:'#eee', borderRadius:8}}
-                  onPress={() => setChallengeTarget(null)}>
-                  <Text style={{color:COLORS.secondary, fontWeight:'bold'}}>Cancel</Text>
+                  style={{ paddingVertical: 8, paddingHorizontal: 18, backgroundColor: '#eee', borderRadius: 8 }}
+                  onPress={() => setChallengeTarget(null)}
+                >
+                  <Text style={{ color: COLORS.secondary, fontWeight: 'bold' }}>Cancel</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -143,96 +341,85 @@ export default function Home() {
           ))}
         </View>
 
-        {demoMode ? (
-          segment === "Singles" ? (
-            <>
-            <FlatList
-              data={rankingData}
-              showsVerticalScrollIndicator={false}
-              keyExtractor={item => item.user_id}
-              renderItem={({ item, index }) => (
-                <View style={styles.singlesCard}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                    <Text style={styles.rank}>{index + 1}</Text>
-                    <Text style={[styles.name, { fontWeight: 'bold', fontSize: 17, marginLeft: 8 }]}>{item.name}</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={styles.rating}>Rating: {item.rating}</Text>
-                    {item.user_id !== currentUserId && (
-                      <TouchableOpacity
-                        style={styles.challengeBtn}
-                        onPress={() => setChallengeTarget(item)}
-                        hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
-                      >
-                        <MaterialCommunityIcons name="sword-cross" size={24} color={COLORS.primaryGradient[1]} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                  <Text style={{ color: COLORS.text.dark, fontSize: 15, fontWeight: 'bold', marginTop: 2 }}>
-                    W-L: {item.wins ?? 0}-{item.losses ?? 0}  Win%: {item.wins !== undefined && item.losses !== undefined && (item.wins + item.losses) > 0 ? Math.round((item.wins / (item.wins + item.losses)) * 100) : 0}%
-                  </Text>
+        {segment === "Singles" ? (
+          <FlatList
+            data={singlesStandings}
+            showsVerticalScrollIndicator={false}
+            keyExtractor={item => item.user_id}
+            renderItem={({ item }) => (
+              <View style={styles.singlesCard}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                  <Text style={styles.rank}>{item.position}</Text>
+                  <Text style={[styles.name, { fontWeight: 'bold', fontSize: 17, marginLeft: 8 }]}>{item.name}</Text>
                 </View>
-              )}
-              style={{ marginTop: 16 }}
-            />
-            </>
-          ) : (
-            <>
-              <TouchableOpacity
-                style={styles.createTeamBtn}
-                onPress={() => setModalVisible(true)}
-              >
-                <Text style={styles.createTeamBtnText}>+ Create Team</Text>
-              </TouchableOpacity>
-              <FlatList
-                data={doublesStandings}
-                showsVerticalScrollIndicator={false}
-                keyExtractor={item => item.team_id}
-                renderItem={({ item, index }) => {
-                  // Check if current user is a member of this team
-                  const isMyTeam = item.members.includes(currentUserId);
-                  return (
-                    <View style={styles.doublesCard}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                        <Text style={styles.rank}>{index + 1}.</Text>
-                        <Text style={[styles.name, { fontWeight: 'bold', fontSize: 17, marginLeft: 8 }]}>{item.name}</Text>
-                      </View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={{ color: COLORS.primaryGradient[1], fontSize: 15, marginBottom: 2 }}>
-                          Members: {item.members.map((id: string) => {
-                            const p = profiles.find(p => p.user_id === id);
-                            return p ? p.name : id;
-                          }).join(", ")}
-                        </Text>
-                        {!isMyTeam && (
-                          <TouchableOpacity
-                            style={styles.challengeBtn}
-                            onPress={() => setChallengeTarget(item)}
-                            hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
-                          >
-                            <MaterialCommunityIcons name="sword-cross" size={24} color={COLORS.primaryGradient[1]} />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                      <Text style={{ color: COLORS.secondary, fontSize: 16, fontWeight: 'bold', marginTop: 4 }}>
-                        W-L: {item.wins}-{item.losses}  Win%: {(item.win_percentage * 100).toFixed(0)}%
-                      </Text>
-                    </View>
-                  );
-                }}
-                style={{ marginTop: 16 }}
-                ListEmptyComponent={<Text style={{color: 'red', textAlign: 'center'}}>No teams found for this club.</Text>}
-              />
-              <CreateTeamModal
-                visible={modalVisible}
-                onClose={() => setModalVisible(false)}
-                onCreate={team => addDemoTeam(team)}
-                currentUserId={"user-1"}
-              />
-            </>
-          )
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.rating}>Rating: {item.rating}</Text>
+                  {item.user_id !== currentUserId && (
+                    <TouchableOpacity
+                      style={styles.challengeBtn}
+                      onPress={() => setChallengeTarget(item)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <MaterialCommunityIcons name="sword-cross" size={24} color={COLORS.primaryGradient[1]} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <Text style={{ color: COLORS.text.dark, fontSize: 15, fontWeight: 'bold', marginTop: 2 }}>
+                  W-L: {item.wins}-{item.losses}  Win%: {(item.wins + item.losses) > 0 ? Math.round((item.wins / (item.wins + item.losses)) * 100) : 0}%
+                </Text>
+              </View>
+            )}
+            ListEmptyComponent={<Text style={{ color: 'red', textAlign: 'center' }}>No players found in this vine.</Text>}
+          />
         ) : (
-          <Text style={styles.subtitle}>This is your home screen. Start climbing the ladder!</Text>
+          <>
+            <TouchableOpacity
+              style={styles.createTeamBtn}
+              onPress={() => setModalVisible(true)}
+            >
+              <Text style={styles.createTeamBtnText}>+ Create Team</Text>
+            </TouchableOpacity>
+            <FlatList
+              data={doublesStandings}
+              showsVerticalScrollIndicator={false}
+              keyExtractor={item => item.team_id}
+              renderItem={({ item }) => {
+                const isMyTeam = userTeams.includes(item.team_id);
+                return (
+                  <View style={styles.doublesCard}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                      <Text style={styles.rank}>{item.position}.</Text>
+                      <Text style={[styles.name, { fontWeight: 'bold', fontSize: 17, marginLeft: 8 }]}>{item.name}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={{ color: COLORS.primaryGradient[1], fontSize: 15, marginBottom: 2 }}>
+                        Members: {item.members.join(", ")}
+                      </Text>
+                      {!isMyTeam && userTeams.length > 0 && (
+                        <TouchableOpacity
+                          style={styles.challengeBtn}
+                          onPress={() => setChallengeTarget(item)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <MaterialCommunityIcons name="sword-cross" size={24} color={COLORS.primaryGradient[1]} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <Text style={{ color: COLORS.secondary, fontSize: 16, fontWeight: 'bold', marginTop: 4 }}>
+                      W-L: {item.wins}-{item.losses}  Win%: {(item.wins + item.losses) > 0 ? Math.round((item.wins / (item.wins + item.losses)) * 100) : 0}%
+                    </Text>
+                  </View>
+                );
+              }}
+              ListEmptyComponent={<Text style={{ color: 'red', textAlign: 'center' }}>No teams found for this vine.</Text>}
+            />
+            <CreateTeamModal
+              visible={modalVisible}
+              onClose={() => setModalVisible(false)}
+              onCreate={handleCreateTeam}
+              currentUserId={currentUserId || ""}
+            />
+          </>
         )}
       </View>
     </BackgroundWrapper>
@@ -252,21 +439,19 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     backgroundColor: '#fff',
     borderRadius: 10,
-    padding: 14,
+    padding: 18,
     marginVertical: 8,
-    marginHorizontal: 0,
     elevation: 2,
-    width: '96%',
-    alignSelf: 'center',
+    width: '100%',
+    alignSelf: 'stretch',
     borderWidth: 1,
     borderColor: '#e0e0e0',
+    marginHorizontal: 0,
   },
-
   container: {
     flex: 1,
     justifyContent: "flex-start",
-    alignItems: "center",
-    paddingHorizontal: 20,
+    alignItems: "stretch",
     paddingTop: 40,
   },
   segmentedControl: {
@@ -308,46 +493,18 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Bold",
     fontSize: 16,
   },
-  menuButton: {
-    position: 'absolute',
-    top: 40,
-    left: 16,
-    zIndex: 10,
-    padding: 4,
-  },
-  subtitle: {
-    fontSize: TYPOGRAPHY.sizes.landing.tagline,
-    fontFamily: TYPOGRAPHY.fonts.body,
-    color: COLORS.secondary,
-    textAlign: "center",
-  },
-  title: {
-    fontSize: 24,
-    fontFamily: "Roboto-Bold",
-    color: COLORS.text.dark,
-    marginBottom: 16,
-  },
-
   doublesCard: {
     flexDirection: 'column',
     backgroundColor: '#fff',
     borderRadius: 10,
-    padding: 14,
+    padding: 18,
     marginVertical: 8,
-    marginHorizontal: 0,
     elevation: 2,
-    width: '96%',
-    alignSelf: 'center',
+    width: '100%',
+    alignSelf: 'stretch',
     borderWidth: 1,
     borderColor: '#e0e0e0',
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    marginHorizontal: 0,
   },
   rank: {
     fontSize: 18,

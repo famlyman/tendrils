@@ -1,31 +1,16 @@
 // app/(tabs)/settings.tsx
 import React from "react";
 import { View, Text, Switch, StyleSheet, TouchableOpacity } from "react-native";
-import { useDemoData } from "../components/DemoDataContext";
+
 import { COLORS, TYPOGRAPHY } from "../constants/theme";
 import BackgroundWrapper from "../components/BackgroundWrapper";
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { useRouter } from "expo-router";
 
-function ExitDemoButton({ setDemoMode }: { setDemoMode: (v: boolean) => void }) {
-  const router = useRouter();
-  return (
-    <TouchableOpacity
-      style={{ backgroundColor: COLORS.primaryGradient[1], paddingVertical: 12, paddingHorizontal: 28, borderRadius: 8 }}
-      onPress={() => {
-        setDemoMode(false);
-        router.replace('/onboarding');
-      }}
-    >
-      <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Exit Demo Mode</Text>
-    </TouchableOpacity>
-  );
-}
+
 
 export default function SettingsScreen() {
-  const { demoMode, setDemoMode } = useDemoData();
-
   return (
     <BackgroundWrapper>
       <View style={styles.outerContainer}>
@@ -34,25 +19,7 @@ export default function SettingsScreen() {
         </View>
         <View style={styles.card}>
           <Text style={styles.title}>Settings</Text>
-          <View style={styles.row}>
-            <Text style={styles.label}>Demo Mode</Text>
-            <Switch
-              value={demoMode}
-              onValueChange={setDemoMode}
-              trackColor={{ false: COLORS.secondary, true: COLORS.primaryGradient[0] }}
-              thumbColor={demoMode ? COLORS.primaryGradient[0] : COLORS.secondary}
-            />
-          </View>
-
-          {demoMode && (
-            <View style={{ marginTop: 24, alignItems: 'center' }}>
-              <Text style={{ color: COLORS.secondary, marginBottom: 8 }}>
-                Want to start using Tendrils for real?
-              </Text>
-              <ExitDemoButton setDemoMode={setDemoMode} />
-            </View>
-          )}
-
+          {/* Add real settings here */}
         </View>
       </View>
     </BackgroundWrapper>

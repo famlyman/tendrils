@@ -6,7 +6,7 @@ import { Button } from "react-native-elements";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../../supabase";
-import { useDemoData } from "../../components/DemoDataContext";
+
 import * as Animatable from "react-native-animatable";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import * as ImagePicker from "expo-image-picker";
@@ -14,7 +14,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 
 export default function Profile() {
-  const { demoMode, profiles } = useDemoData();
+
   const router = useRouter();
   const [session, setSession] = useState<any>(null);
   const [name, setName] = useState<string>("");
@@ -26,6 +26,48 @@ export default function Profile() {
   const [joinCode, setJoinCode] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [showEditCard, setShowEditCard] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(false);
+
+  // Fetch session on mount and listen for auth state changes
+  useEffect(() => {
+    let mounted = true;
+    const getSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (mounted) setSession(session);
+    };
+    getSession();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe();
+    };
+  }, []);
+
+  // Check onboarding state on mount
+  useEffect(() => {
+    let mounted = true;
+    const checkOnboarding = async () => {
+      const completed = await AsyncStorage.getItem('hasCompletedOnboarding');
+      if (mounted) setHasCompletedOnboarding(completed === 'true');
+      if (mounted) setOnboardingChecked(true);
+    };
+    checkOnboarding();
+    return () => { mounted = false; };
+  }, []);
+
+  // Onboarding redirect logic
+  useEffect(() => {
+    if (onboardingChecked && !loading && session && !hasCompletedOnboarding) {
+      AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+      AsyncStorage.setItem('isSignedUp', 'true');
+      if (router && typeof router.replace === 'function') {
+        router.replace('/(tabs)/home');
+      }
+    }
+  }, [onboardingChecked, loading, session, hasCompletedOnboarding, router]);
 
   const saveButtonRef = useRef<any>(null);
   const removeButtonRef = useRef<any>(null);
@@ -39,28 +81,16 @@ export default function Profile() {
   };
 
   useEffect(() => {
-    if (demoMode && profiles.length > 0) {
-      // Use the first demo profile as the "user"
-      const demo = profiles[0];
-      setName(demo.name);
-      setRating(demo.rating ?? null);
-      setProfilePicture(null);
-      setRoles([demo.role]);
-      setBio(demo.bio ?? "");
-      setPhone("");
-      setLoading(false);
-      return;
-    }
     const fetchUserData = async () => {
       try {
         console.log("[Profile] Fetching user data...");
         const { data: { session } } = await supabase.auth.getSession();
-        setSession(session);
         console.log("[Profile] Session:", session);
 
-        if (session) {
+        if (session && session.user) {
           const { data: userData, error: userError } = await supabase.auth.getUser();
-          if (userError) throw userError;
+          console.log('[Profile] userData:', userData, 'userError:', userError);
+          if (userError || !userData || !userData.user) throw userError || new Error('No user');
           const fullName = userData.user.user_metadata.full_name || "";
           const userId = userData.user.id;
           console.log("[Profile] User ID:", userId);
@@ -120,7 +150,7 @@ export default function Profile() {
       }
     };
     fetchUserData();
-  }, []);
+  }, [session]);
 
   const pickImage = async () => {
     try {
@@ -350,11 +380,11 @@ export default function Profile() {
             </View>
           )}
           <Text style={styles.title}>Profile</Text>
-          <Text style={styles.label}>Email: {session.user.email}</Text>
           <Text style={styles.label}>Name: {name}</Text>
+          {phone && <Text style={styles.label}>Phone: {phone}</Text>}
+          <Text style={styles.label}>Email: {session.user.email}</Text>
           {rating !== null && <Text style={styles.label}>Rating: {rating}</Text>}
           {bio && <Text style={styles.label}>Bio: {bio}</Text>}
-          {phone && <Text style={styles.label}>Phone: {phone}</Text>}
           {/* <Text style={styles.label}>Roles: {roles.join(", ") || "None"}</Text> */}
           {/* <Text style={styles.label}>Team: {teamInfo}</Text> */}
           {roles.includes("Coordinator") && joinCode && (
@@ -387,6 +417,17 @@ export default function Profile() {
                 placeholderTextColor="#999"
                 autoCapitalize="words"
               />
+              <Text style={styles.cardLabel}>Phone Number:</Text>
+              <TextInput
+                style={styles.input}
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="e.g., 1234567890"
+                placeholderTextColor="#999"
+                keyboardType="phone-pad"
+              />
+              <Text style={styles.cardLabel}>Email:</Text>
+              <Text style={styles.input}>{session.user.email}</Text>
               <Text style={styles.cardLabel}>Rating (0-5):</Text>
               <TextInput
                 style={styles.input}

@@ -1,7 +1,6 @@
 // Modal for creating a doubles team: select partner, enter team name
 import React, { useState } from "react";
 import { Modal, View, Text, TouchableOpacity, TextInput, FlatList, StyleSheet } from "react-native";
-import { useDemoData } from "./DemoDataContext";
 
 export default function CreateTeamModal({
   visible,
@@ -14,7 +13,10 @@ export default function CreateTeamModal({
   onCreate: (team: { team_id: string; name: string; members: string[] }) => void;
   currentUserId: string;
 }) {
-  const { profiles, teams } = useDemoData();
+  // TODO: Replace with real data fetching from Supabase
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  // Fetch profiles and teams from Supabase here if needed
   const [teamName, setTeamName] = useState("");
   const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
 
