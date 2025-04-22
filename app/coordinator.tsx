@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, Alert } from "react-native";
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, Alert, Button } from "react-native";
 import { supabase } from "../supabase";
 import { router } from "expo-router";
+
+import SeasonManager from "./components/SeasonManager";
 
 export default function CoordinatorDashboard() {
   const [userRoles, setUserRoles] = useState<string[]>([]);
@@ -18,6 +20,7 @@ export default function CoordinatorDashboard() {
           return;
         }
 
+        // Role check (as you already have)
         const { data: roleData, error: roleError } = await supabase
           .from("user_roles")
           .select("role_id")
@@ -40,19 +43,15 @@ export default function CoordinatorDashboard() {
           return;
         }
 
+        // Fetch only pending teams
         const { data: teamData, error: teamError } = await supabase
           .from("teams")
-          .select("team_id, team_name, captain_id, team_records(wins, losses, total_points)")
-          .order("team_id");
+          .select("team_id, name, status")
+          .eq("status", "pending")
+          .order("created_at");
         if (teamError) throw teamError;
 
-        setTeams(teamData.map(team => ({
-          team_id: team.team_id,
-          team_name: team.team_name,
-          wins: team.team_records?.[0]?.wins ?? 0,
-          losses: team.team_records?.[0]?.losses ?? 0,
-          total_points: team.team_records?.[0]?.total_points ?? 0,
-        })));
+        setTeams(teamData);
       } catch (err) {
         console.log("Error fetching data:", err);
       } finally {
@@ -62,75 +61,57 @@ export default function CoordinatorDashboard() {
     fetchUserAndTeams();
   }, []);
 
-  const renderTeam = ({ item }: { item: { team_id: number; team_name: string; wins: number; losses: number; total_points: number } }) => (
-    <View style={styles.teamItem}>
-      <Text style={styles.teamName}>{item.team_name}</Text>
-      <Text>Wins: {item.wins} | Losses: {item.losses} | Points: {item.total_points}</Text>
-    </View>
-  );
+  // Approve handler
+  const handleApprove = async (team_id: string) => {
+    const { error } = await supabase.from("teams").update({ status: "approved" }).eq("team_id", team_id);
+    if (!error) {
+      setTeams(teams.filter(t => t.team_id !== team_id));
+      Alert.alert("Success", "Team approved.");
+    } else {
+      Alert.alert("Error", "Could not approve team.");
+    }
+  };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0000ff" />
-      </View>
-    );
-  }
+  // Reject handler
+  const handleReject = async (team_id: string) => {
+    const { error } = await supabase.from("teams").update({ status: "rejected" }).eq("team_id", team_id);
+    if (!error) {
+      setTeams(teams.filter(t => t.team_id !== team_id));
+      Alert.alert("Success", "Team rejected.");
+    } else {
+      Alert.alert("Error", "Could not reject team.");
+    }
+  };
 
-  if (!userRoles.includes("Coordinator")) {
-    return null; // Redirect handled in useEffect
-  }
+  if (loading) return <ActivityIndicator />;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Coordinator Dashboard</Text>
-      <Text style={styles.subtitle}>Team Standings</Text>
-      {teams.length > 0 ? (
-        <FlatList
-          data={teams}
-          renderItem={renderTeam}
-          keyExtractor={item => item.team_id.toString()}
-          style={styles.teamList}
-        />
-      ) : (
-        <Text>No teams found.</Text>
-      )}
+      <Text style={styles.header}>Pending Teams</Text>
+      <FlatList
+        data={teams}
+        keyExtractor={item => item.team_id}
+        renderItem={({ item }) => (
+          <View style={styles.teamCard}>
+            <Text style={styles.teamName}>{item.name}</Text>
+            <Text>Status: {item.status}</Text>
+            <View style={styles.actionRow}>
+              <Button title="Approve" onPress={() => handleApprove(item.team_id)} />
+              <Button title="Reject" onPress={() => handleReject(item.team_id)} color="red" />
+            </View>
+          </View>
+        )}
+        ListEmptyComponent={<Text>No pending teams.</Text>}
+      />
+      <SeasonManager />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: "#f5f5f5",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  teamList: {
-    width: "100%",
-  },
-  teamItem: {
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-  },
-  teamName: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  container: { flex: 1, padding: 20 },
+  header: { fontSize: 22, fontWeight: "bold", marginBottom: 16 },
+  teamCard: { backgroundColor: "#fff", padding: 16, borderRadius: 8, marginBottom: 12 },
+  teamName: { fontSize: 18, fontWeight: "bold" },
+  actionRow: { flexDirection: "row", gap: 12, marginTop: 8 },
 });

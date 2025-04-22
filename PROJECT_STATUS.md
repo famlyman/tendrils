@@ -21,8 +21,52 @@ _Last updated: 2025-04-21 15:36 EDT_
 - [x] Error boundary and loading screens
 
 ## Features/Flows In Progress or Planned
-- [ ] Replace hardcoded user ID with auth context (`home.tsx`)
+- [x] Replace hardcoded user ID with auth context (`home.tsx`)
 - [ ] Coordinator/Team flows polish
+
+    **Coordinator/Team Flows Polish Checklist**
+
+    1. **User Roles & Permissions**
+        - [x] Clearly define/document difference between coordinators and players (TypeScript interfaces & UI)
+        - [x] Ensure only players can create teams and select teammates
+        - [ ] Coordinators only manage/approve teams, set schedules, etc.—not create teams
+
+    2. **Team Creation & Invitation Flow (Player)**
+        - [ ] Streamlined "Create Team" flow for players (clear CTA)
+        - [ ] Simple teammate selection (search/invite/pick)
+        - [ ] Confirmation and feedback after creation/invite
+        - [ ] Handle edge cases (e.g., teammate already on another team)
+        - [ ] Use animations/custom fonts for onboarding/team creation
+
+    3. **Coordinator Tools**
+        - [ ] Coordinator dashboard is visually distinct, only shows management actions
+        - [ ] Easy access to approve teams, manage schedules, view stats
+        - [ ] No ability for coordinators to create/edit teams directly
+
+    4. **Navigation & State**
+        - [ ] Use Expo Router for clear separation of player/coordinator flows
+        - [ ] Persist relevant state (e.g., team creation progress) with AsyncStorage
+        - [ ] Ensure back navigation and deep linking work as expected
+
+    5. **Error Handling & Feedback**
+        - [ ] Use ErrorBoundary and LoadingScreen for all async/team actions
+        - [ ] Clear error messages for permission issues
+        - [ ] Show loading indicators during network calls
+
+    6. **UI/UX Consistency**
+        - [ ] Apply centralized theme/typography to all Coordinator/Team screens
+        - [ ] Consistent button placement, spacing, and feedback
+        - [ ] Use confirmation dialogs for destructive actions
+
+    7. **Backend Integration & Security**
+        - [ ] Supabase RLS rules enforce correct permissions
+        - [ ] All sensitive actions require authentication
+        - [ ] Credentials/keys in environment variables
+
+    8. **Testing & QA**
+        - [ ] Add unit/integration tests for all flows
+        - [ ] Test as both player and coordinator
+        - [ ] Gather user feedback or run usability test
 - [ ] More robust match/challenge logic
 - [ ] Improved onboarding polish
 - [ ] Real-vs-demo data handling
