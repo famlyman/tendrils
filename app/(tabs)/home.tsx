@@ -7,9 +7,9 @@ import { useRouter } from "expo-router";
 import { useAuth } from "../../context/AuthContext";
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import BackgroundWrapper from "../../components/BackgroundWrapper";
-import TeamCreationModal from "../components/TeamCreationModal";
-import LadderSelector from "../components/LadderSelector";
-import StandingsList from "../components/StandingsList";
+import TeamCreationModal from "../../components/TeamCreationModal";
+import LadderSelector from "../../components/LadderSelector";
+import StandingsList from "../../components/StandingsList";
 
 const SEGMENTS = ["Singles", "Doubles"];
 
@@ -183,6 +183,79 @@ export default function Home() {
     };
     fetchStandings();
   }, [selectedLadder, vineId, userId]);
+
+  // JOIN LADDER LOGIC
+  const handleJoinLadder = async () => {
+    if (!selectedLadder || !vineId) return;
+    try {
+      if (segment === "Singles") {
+        // Insert user into user_ladder_nodes for this ladder
+        const { error } = await supabase.from("user_ladder_nodes").insert({
+          user_id: userId,
+          ladder_id: selectedLadder.ladder_id,
+          position: singlesStandings.length + 1,
+        });
+        if (error) throw error;
+        Alert.alert("Success", "You have joined the ladder!");
+      } else {
+        // Find user's team (first one)
+        if (!userTeams || userTeams.length === 0) {
+          Alert.alert("Error", "You must create a team first.");
+          return;
+        }
+        // Insert team into user_ladder_nodes for this ladder
+        const { error } = await supabase.from("user_ladder_nodes").insert({
+          team_id: userTeams[0],
+          ladder_id: selectedLadder.ladder_id,
+          position: doublesStandings.length + 1,
+        });
+        if (error) throw error;
+        Alert.alert("Success", "Your team has joined the ladder!");
+      }
+      // Refresh standings
+      setLoading(true);
+      // Triggers useEffect
+      setSelectedLadder({ ...selectedLadder });
+    } catch (e) {
+      Alert.alert("Error", "Failed to join ladder.");
+    }
+  };
+
+  // COORDINATOR REMOVE LOGIC
+  const handleRemoveFromLadder = async (item: any) => {
+    if (!selectedLadder) return;
+    Alert.alert(
+      "Remove from Ladder",
+      `Are you sure you want to remove ${item.name} from this ladder?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove", style: "destructive", onPress: async () => {
+            try {
+              if (segment === "Singles" && "user_id" in item) {
+                await supabase
+                  .from("user_ladder_nodes")
+                  .delete()
+                  .eq("user_id", item.user_id)
+                  .eq("ladder_id", selectedLadder.ladder_id);
+              } else if (segment === "Doubles" && "team_id" in item) {
+                await supabase
+                  .from("user_ladder_nodes")
+                  .delete()
+                  .eq("team_id", item.team_id)
+                  .eq("ladder_id", selectedLadder.ladder_id);
+              }
+              // Refresh standings
+              setLoading(true);
+              setSelectedLadder({ ...selectedLadder });
+            } catch (e) {
+              Alert.alert("Error", "Failed to remove from ladder.");
+            }
+          }
+        }
+      ]
+    );
+  };
 
   // Accepts the object from CreateTeamModal and extracts partnerId from members[1]
   const handleCreateTeam = async ({ name, members }: { name: string; members: string[] }) => {
@@ -382,11 +455,31 @@ export default function Home() {
           selectedLadder={selectedLadder}
           onSelectLadder={setSelectedLadder}
         />
+        {/* JOIN LADDER BUTTON LOGIC */}
+        {segment === "Singles"
+          ? !singlesStandings.some(p => p.user_id === userId) && userProfile?.role === 'player' && (
+              <TouchableOpacity
+                style={[styles.createTeamBtn, { marginBottom: 10 }]}
+                onPress={handleJoinLadder}
+              >
+                <Text style={styles.createTeamBtnText}>Join Ladder</Text>
+              </TouchableOpacity>
+            )
+          : !doublesStandings.some(t => userTeams?.includes(t.team_id)) && userProfile?.role === 'player' && (
+              <TouchableOpacity
+                style={[styles.createTeamBtn, { marginBottom: 10 }]}
+                onPress={handleJoinLadder}
+              >
+                <Text style={styles.createTeamBtnText}>Join Ladder</Text>
+              </TouchableOpacity>
+            )}
         {segment === "Singles" ? (
           <StandingsList
             data={singlesStandings}
             segment="Singles"
             onChallenge={setChallengeTarget}
+            isCoordinator={userProfile?.role === 'coordinator'}
+            onRemove={item => handleRemoveFromLadder(item)}
           />
         ) : (
           <>
@@ -395,6 +488,8 @@ export default function Home() {
               segment="Doubles"
               onChallenge={setChallengeTarget}
               userTeams={userTeams}
+              isCoordinator={userProfile?.role === 'coordinator'}
+              onRemove={item => handleRemoveFromLadder(item)}
             />
             {userProfile?.role === 'player' && (
               <TouchableOpacity

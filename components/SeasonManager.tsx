@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, FlatList, Button, Modal, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
-import { supabase } from "../../supabase";
+import { supabase } from "../supabase";
 
 interface Ladder {
   ladder_id: string;

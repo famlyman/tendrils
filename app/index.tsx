@@ -8,6 +8,7 @@ import { supabase } from "../supabase";
 import { useFonts } from "expo-font";
 import * as Animatable from "react-native-animatable";
 import { MaterialIcons } from "@expo/vector-icons";
+import LoadingScreen from "../components/LoadingScreen";
 
 // Import the theme values
 import { COLORS, TYPOGRAPHY, STYLES, ICONS } from "../constants/theme";
@@ -22,6 +23,7 @@ export default function LandingPage() {
     "Roboto-Regular": require("../assets/fonts/Roboto-Regular.ttf"),
     "Roboto-Bold": require("../assets/fonts/Roboto-Bold.ttf"),
   });
+  const [loading, setLoading] = React.useState(true);
 
 
 // app/index.tsx (relevant parts)
@@ -43,6 +45,7 @@ useEffect(() => {
       await AsyncStorage.clear();
       console.log("AsyncStorage cleared due to no session or incomplete onboarding");
     }
+    setLoading(false);
   };
   checkStatus();
 }, []);
@@ -69,6 +72,10 @@ const handleGetStarted = async () => {
   const handleAttributionPress = () => {
     Linking.openURL("https://www.vecteezy.com/free-png/competition");
   };
+
+  if (loading || !fontsLoaded) {
+    return <LoadingScreen />;
+  }
 
   return (
     <BackgroundWrapper>

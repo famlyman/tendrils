@@ -29,7 +29,7 @@ _Last updated: 2025-04-21 15:36 EDT_
     1. **User Roles & Permissions**
         - [x] Clearly define/document difference between coordinators and players (TypeScript interfaces & UI)
         - [x] Ensure only players can create teams and select teammates
-        - [ ] Coordinators only manage/approve teams, set schedules, etc.—not create teams
+        - [x] Coordinators only manage/approve teams, set schedules, etc.—not create teams
 
     2. **Team Creation & Invitation Flow (Player)**
         - [ ] Streamlined "Create Team" flow for players (clear CTA)
@@ -56,6 +56,10 @@ _Last updated: 2025-04-21 15:36 EDT_
     6. **UI/UX Consistency**
         - [ ] Apply centralized theme/typography to all Coordinator/Team screens
         - [ ] Consistent button placement, spacing, and feedback
+
+    7. **Future Features**
+        - [ ] In-app chat between all players (placeholder, not implemented yet)
+
         - [ ] Use confirmation dialogs for destructive actions
 
     7. **Backend Integration & Security**
