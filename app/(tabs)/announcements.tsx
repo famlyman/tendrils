@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, FlatList, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, FlatList, StyleSheet } from "react-native";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../context/AuthContext";
+import BackgroundWrapper from "../../components/BackgroundWrapper";
+import LoadingScreen from "../../components/LoadingScreen";
+import { COLORS, TYPOGRAPHY } from "../../constants/theme";
 
 interface Announcement {
   message_id: string;
@@ -18,6 +21,15 @@ const AnnouncementsScreen: React.FC = () => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [userTeams, setUserTeams] = useState<string[]>([]);
+
+  // Show loading until userId is available
+  if (!userId || loading) {
+    return (
+      <BackgroundWrapper>
+        <LoadingScreen />
+      </BackgroundWrapper>
+    );
+  }
 
   useEffect(() => {
     const fetchUserTeams = async () => {
@@ -59,35 +71,66 @@ const AnnouncementsScreen: React.FC = () => {
     fetchAnnouncements();
   }, [userId, userTeams]);
 
-  if (loading) return <ActivityIndicator />;
-
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Announcements</Text>
-      <FlatList
-        data={announcements}
-        keyExtractor={item => item.message_id}
-        renderItem={({ item }) => (
-          <View style={styles.announcementCard}>
-            <Text style={styles.content}>{item.content}</Text>
-            <Text style={styles.meta}>
-              {new Date(item.created_at).toLocaleString()} | {item.target_type === 'all' ? 'All' : item.target_type.charAt(0).toUpperCase() + item.target_type.slice(1)}
-            </Text>
-          </View>
-        )}
-        ListEmptyComponent={<Text style={styles.emptyText}>No announcements yet.</Text>}
-      />
-    </View>
+    <BackgroundWrapper>
+      <View style={styles.container}>
+        <Text style={styles.header}>Announcements</Text>
+        <FlatList
+          data={announcements}
+          keyExtractor={item => item.message_id}
+          renderItem={({ item }) => (
+            <View style={styles.announcementCard}>
+              <Text style={styles.content}>{item.content}</Text>
+              <Text style={styles.meta}>
+                {new Date(item.created_at).toLocaleString()} | {item.target_type === 'all' ? 'All' : item.target_type.charAt(0).toUpperCase() + item.target_type.slice(1)}
+              </Text>
+            </View>
+          )}
+          ListEmptyComponent={<Text style={styles.emptyText}>No announcements yet.</Text>}
+        />
+      </View>
+    </BackgroundWrapper>
   );
-};
+}
+;
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20 },
-  header: { fontSize: 22, fontWeight: "bold", marginBottom: 16 },
-  announcementCard: { backgroundColor: "#fff", padding: 14, borderRadius: 8, marginBottom: 12 },
-  content: { fontSize: 16, marginBottom: 6 },
-  meta: { color: "#888", fontSize: 12 },
-  emptyText: { textAlign: "center", marginTop: 40, color: "#888" },
+  header: {
+    fontSize: TYPOGRAPHY.sizes.landing.title,
+    fontFamily: TYPOGRAPHY.fonts.heading,
+    color: COLORS.text.dark,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  announcementCard: {
+    backgroundColor: COLORS.background.card,
+    padding: 14,
+    borderRadius: 8,
+    marginBottom: 12,
+    shadowColor: COLORS.shadow,
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  content: {
+    fontSize: 16,
+    marginBottom: 6,
+    fontFamily: TYPOGRAPHY.fonts.body,
+    color: COLORS.text.primary,
+  },
+  meta: {
+    color: COLORS.text.muted,
+    fontSize: 12,
+    fontFamily: TYPOGRAPHY.fonts.body,
+  },
+  emptyText: {
+    textAlign: "center",
+    marginTop: 40,
+    color: COLORS.text.muted,
+    fontFamily: TYPOGRAPHY.fonts.body,
+  },
 });
 
 export default AnnouncementsScreen;

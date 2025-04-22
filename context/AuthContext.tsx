@@ -13,13 +13,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     const fetchUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      setUserId(session?.user?.id ?? null);
-      setLoading(false);
+      if (mounted) {
+        setUserId(session?.user?.id ?? null);
+        setLoading(false);
+      }
     };
+
     fetchUser();
-    // Optionally: listen for auth changes here
+
+    // Listen for auth state changes (including session restoration)
+    const { data: { subscription: listener } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted) {
+        setUserId(session?.user?.id ?? null);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      listener?.unsubscribe?.();
+    };
   }, []);
 
   return (

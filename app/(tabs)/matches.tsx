@@ -1,10 +1,12 @@
 // app/(tabs)/matches.tsx
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, StatusBar, Modal, TextInput, Alert } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../../supabase";
 import { COLORS, TYPOGRAPHY } from "../../constants/theme";
 import { useRouter } from "expo-router";
+import BackgroundWrapper from "../../components/BackgroundWrapper";
+import LoadingScreen from "../../components/LoadingScreen";
+import { LinearGradient } from "expo-linear-gradient";
 
 const SEGMENTS = ["Recent", "Upcoming"];
 
@@ -40,6 +42,15 @@ export default function Matches() {
   const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
   const [score, setScore] = useState("");
   const router = useRouter();
+
+  // Show loading spinner until data is ready
+  if (loading || !currentUser) {
+    return (
+      <BackgroundWrapper>
+        <LoadingScreen />
+      </BackgroundWrapper>
+    );
+  }
 
   useEffect(() => {
     const fetchChallenges = async () => {
@@ -291,24 +302,23 @@ export default function Matches() {
   const data = segment === "Recent" ? challenges : upcomingChallenges;
 
   const renderMatch = ({ item }: { item: Challenge }) => (
-    <View style={styles.matchItem}>
-      <Text style={styles.matchText}>
-        {item.match_type === "singles" ? (
-          <>
-            Singles: {item.challenger_name} vs {item.opponent_name}
-            {segment === "Recent"
-              ? ` — Winner: ${item.winner_id === item.challenger_id ? item.challenger_name : item.opponent_name} — Score: ${item.score || "Not entered"}`
-              : ` — Status: ${item.status} — Scheduled: ${new Date(item.date).toLocaleDateString()}`}
-          </>
-        ) : (
-          <>
-            Doubles: {item.team_1_name} ({item.team_1_members?.join(" & ")}) vs {item.team_2_name} ({item.team_2_members?.join(" & ")})
-            {segment === "Recent"
-              ? ` — Winner: ${item.winner_id === item.team_1_id ? item.team_1_name : item.team_2_name} — Score: ${item.score || "Not entered"}`
-              : ` — Status: ${item.status} — Scheduled: ${new Date(item.date).toLocaleDateString()}`}
-          </>
-        )}
+    <View style={styles.challengeCard}>
+      <Text style={styles.challengeTitle}>
+        {item.match_type === "singles"
+          ? `${item.challenger_name} vs ${item.opponent_name}`
+          : `${item.team_1_name} vs ${item.team_2_name}`}
       </Text>
+      <Text style={styles.challengeMeta}>
+        {new Date(item.date).toLocaleString()} | Status: {item.status}
+      </Text>
+      {item.match_type === "doubles" && (
+        <Text style={styles.challengeMeta}>
+          {item.team_1_members?.join(", ")} vs {item.team_2_members?.join(", ")}
+        </Text>
+      )}
+      {item.score && (
+        <Text style={styles.challengeScore}>Score: {item.score}</Text>
+      )}
       {segment === "Upcoming" && canAcceptDecline(item) && (
         <View style={styles.buttonRow}>
           <TouchableOpacity
@@ -340,25 +350,30 @@ export default function Matches() {
   );
 
   return (
-    <LinearGradient colors={["#A8E6CF", "#4A704A"]} style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#4A704A" />
-      <View style={styles.segmentedControl}>
-        {SEGMENTS.map((s) => (
-          <TouchableOpacity
-            key={s}
-            style={[styles.segment, segment === s && styles.segmentActive]}
-            onPress={() => setSegment(s)}
-          >
-            <Text style={[styles.segmentText, segment === s && styles.segmentTextActive]}>{s}</Text>
-          </TouchableOpacity>
-        ))}
+    <BackgroundWrapper>
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" />
+        {/* Segment Control */}
+        <View style={styles.segmentedControl}>
+          {SEGMENTS.map((s) => (
+            <TouchableOpacity
+              key={s}
+              style={[styles.segment, segment === s && styles.segmentActive]}
+              onPress={() => setSegment(s)}
+            >
+              <Text style={[styles.segmentText, segment === s && styles.segmentTextActive]}>{s}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {/* Challenge List */}
+        <FlatList
+          data={data}
+          keyExtractor={(item) => item.flower_id}
+          renderItem={renderMatch}
+          ListEmptyComponent={<Text style={styles.emptyText}>No matches found.</Text>}
+          contentContainerStyle={{ paddingBottom: 40 }}
+        />
       </View>
-      <FlatList
-        data={data}
-        keyExtractor={(item) => item.flower_id}
-        renderItem={renderMatch}
-        ListEmptyComponent={<Text style={styles.emptyText}>No {segment.toLowerCase()} matches.</Text>}
-      />
       <Modal
         animationType="slide"
         transparent={true}
@@ -401,7 +416,8 @@ export default function Matches() {
           </View>
         </View>
       </Modal>
-    </LinearGradient>
+
+    </BackgroundWrapper>
   );
 }
 
@@ -412,7 +428,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     margin: 16,
     borderRadius: 16,
-    backgroundColor: "#D0F2E8",
+    backgroundColor: COLORS.background.card,
   },
   segment: {
     flex: 1,
@@ -421,39 +437,53 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   segmentActive: {
-    backgroundColor: "#FFD54F",
+    backgroundColor: COLORS.secondary,
   },
   segmentText: {
-    fontFamily: "Roboto-Regular",
-    color: "#1A3C34",
+    fontFamily: TYPOGRAPHY.fonts.body,
+    color: COLORS.text.dark,
     fontSize: 16,
   },
   segmentTextActive: {
-    fontFamily: "Roboto-Bold",
-    color: "#1A3C34",
+    fontFamily: TYPOGRAPHY.fonts.bold,
+    color: COLORS.text.dark,
   },
-  matchItem: {
-    backgroundColor: "#fff",
+  challengeCard: {
+    backgroundColor: COLORS.background.card,
     marginHorizontal: 16,
     marginVertical: 6,
     borderRadius: 10,
     padding: 14,
-    shadowColor: "#000",
+    shadowColor: COLORS.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 2,
   },
-  matchText: {
-    fontSize: 15,
-    color: "#1A3C34",
-    fontFamily: "Roboto-Regular",
+  challengeTitle: {
+    fontSize: 16,
+    color: COLORS.text.dark,
+    fontFamily: TYPOGRAPHY.fonts.bold,
+    marginBottom: 4,
+  },
+  challengeMeta: {
+    fontSize: 13,
+    color: COLORS.text.muted,
+    fontFamily: TYPOGRAPHY.fonts.body,
+    marginBottom: 2,
+  },
+  challengeScore: {
+    fontSize: 14,
+    color: COLORS.secondary,
+    fontFamily: TYPOGRAPHY.fonts.bold,
+    marginTop: 2,
   },
   emptyText: {
     textAlign: "center",
     margin: 30,
-    color: "#1A3C34",
+    color: COLORS.text.dark,
     fontSize: 16,
+    fontFamily: TYPOGRAPHY.fonts.body,
   },
   buttonRow: {
     flexDirection: "row",
@@ -461,14 +491,14 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   actionButton: {
-    backgroundColor: "#FFD54F",
+    backgroundColor: COLORS.secondary,
     padding: 10,
     borderRadius: 5,
     marginHorizontal: 5,
   },
   actionButtonText: {
-    color: "#1A3C34",
-    fontFamily: "Roboto-Bold",
+    color: COLORS.text.dark,
+    fontFamily: TYPOGRAPHY.fonts.bold,
   },
   declineButton: {
     backgroundColor: "red",
@@ -480,7 +510,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   modalContent: {
-    backgroundColor: "white",
+    backgroundColor: COLORS.background.card,
     padding: 20,
     borderRadius: 10,
     width: "80%",
@@ -488,15 +518,18 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 18,
-    fontFamily: "Roboto-Bold",
+    fontFamily: TYPOGRAPHY.fonts.bold,
     marginBottom: 20,
+    color: COLORS.text.dark,
   },
   input: {
     width: "100%",
     padding: 10,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: COLORS.text.muted,
     marginBottom: 20,
+    fontFamily: TYPOGRAPHY.fonts.body,
+    color: COLORS.text.dark,
   },
 });

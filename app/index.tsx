@@ -28,10 +28,20 @@ export default function LandingPage() {
 
 // app/index.tsx (relevant parts)
 useEffect(() => {
+  let isMounted = true;
   const checkStatus = async () => {
+    let tries = 0;
+    let session = null;
+    // Try up to 10 times (2 seconds total)
+    while (isMounted && tries < 10) {
+      const { data } = await supabase.auth.getSession();
+      session = data.session;
+      if (session) break;
+      await new Promise(res => setTimeout(res, 200));
+      tries++;
+    }
     const hasCompletedOnboarding = await AsyncStorage.getItem("hasCompletedOnboarding");
     const isSignedUp = await AsyncStorage.getItem("isSignedUp");
-    const { data: { session } } = await supabase.auth.getSession();
     console.log("Landing - Session:", session);
     console.log("Landing - hasCompletedOnboarding:", hasCompletedOnboarding);
     console.log("Landing - isSignedUp:", isSignedUp);
@@ -39,7 +49,6 @@ useEffect(() => {
     if (session && hasCompletedOnboarding === "true") {
       router.replace("/(tabs)/home");
     } else if (session) {
-      // If the user is logged in but hasn't completed onboarding, skip registration
       router.replace("/onboarding/join-vine");
     } else {
       await AsyncStorage.clear();
@@ -48,6 +57,7 @@ useEffect(() => {
     setLoading(false);
   };
   checkStatus();
+  return () => { isMounted = false; };
 }, []);
 
 const handleGetStarted = async () => {

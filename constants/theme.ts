@@ -21,11 +21,19 @@ export const COLORS = {
     secondary: '#FFD54F',
     dark: '#1A3C34',
     attribution: '#E0E0E0',
+    muted: '#888888', // Added for muted/secondary text
+  },
+
+  background: {
+    card: '#fff', // Card background
+    screen: '#F9F9F9', // Optional, for overall screen background
   },
 
   buttonGradient: ['#FFD54F', '#FFC107'] as const,
 
   overlay: 'rgba(0, 0, 0, 0.3)',
+
+  shadow: '#000000', // Added for shadow color
 };
 
 export const TYPOGRAPHY = {
