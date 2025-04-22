@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, Alert } from
 import { COLORS, TYPOGRAPHY } from "../../constants/theme";
 import { supabase } from "../../supabase";
 import { useRouter } from "expo-router";
+import { useAuth } from "../../context/AuthContext";
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import BackgroundWrapper from "../../components/BackgroundWrapper";
 import CreateTeamModal from "../../components/CreateTeamModal";
@@ -36,26 +37,24 @@ export default function Home() {
   const [segment, setSegment] = useState("Singles");
   const [singlesStandings, setSinglesStandings] = useState<PlayerProfile[]>([]);
   const [doublesStandings, setDoublesStandings] = useState<TeamProfile[]>([]);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [vineId, setVineId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [userTeams, setUserTeams] = useState<string[]>([]); // Track user's teams for doubles
   const router = useRouter();
+  const { userId, loading: authLoading } = useAuth();
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!userId) {
+      router.replace("/login");
+      return;
+    }
     const fetchData = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          router.replace("/login");
-          return;
-        }
-        setCurrentUserId(session.user.id);
-
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
           .select("vine_id")
-          .eq("user_id", session.user.id)
+          .eq("user_id", userId)
           .single();
 
         if (profileError || !profile?.vine_id) {
@@ -137,7 +136,7 @@ export default function Home() {
         const { data: userTeamsData } = await supabase
           .from("team_members")
           .select("team_id")
-          .eq("user_id", session.user.id);
+          .eq("user_id", userId);
 
         setUserTeams(userTeamsData?.map((t: any) => t.team_id) || []);
       } catch (e) {
@@ -153,7 +152,7 @@ export default function Home() {
   // Accepts the object from CreateTeamModal and extracts partnerId from members[1]
   const handleCreateTeam = async (team: { team_id: string; name: string; members: string[] }) => {
     try {
-      if (!vineId || !currentUserId || !team.members[1]) {
+      if (!vineId || !userId || !team.members[1]) {
         Alert.alert("Error", "Missing information for team creation.");
         return;
       }
@@ -170,7 +169,7 @@ export default function Home() {
       await supabase
         .from("team_members")
         .insert([
-          { team_id: teamData.team_id, user_id: currentUserId },
+          { team_id: teamData.team_id, user_id: userId },
           { team_id: teamData.team_id, user_id: partnerId },
         ]);
 
@@ -202,7 +201,7 @@ export default function Home() {
         });
 
       // Fetch member names before updating state
-      const currentUserName = (await supabase.from("profiles").select("name").eq("user_id", currentUserId).single()).data?.name;
+      const currentUserName = (await supabase.from("profiles").select("name").eq("user_id", userId).single()).data?.name;
       const partnerName = (await supabase.from("profiles").select("name").eq("user_id", partnerId).single()).data?.name;
       setDoublesStandings([...doublesStandings, {
         team_id: teamData.team_id,
@@ -223,13 +222,13 @@ export default function Home() {
 
 
   const handleChallenge = async () => {
-    if (!challengeTarget || !vineId || !currentUserId) return;
+    if (!challengeTarget || !vineId || !userId) return;
 
     try {
       if ("user_id" in challengeTarget) {
         // Singles challenge
         const { data, error } = await supabase.rpc("create_challenge", {
-          p_challenger_id: currentUserId,
+          p_challenger_id: userId,
           p_opponent_id: challengeTarget.user_id,
           p_vine_id: vineId,
         });
@@ -354,7 +353,7 @@ export default function Home() {
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Text style={styles.rating}>Rating: {item.rating}</Text>
-                  {item.user_id !== currentUserId && (
+                  {item.user_id !== userId && (
                     <TouchableOpacity
                       style={styles.challengeBtn}
                       onPress={() => setChallengeTarget(item)}
@@ -417,7 +416,7 @@ export default function Home() {
               visible={modalVisible}
               onClose={() => setModalVisible(false)}
               onCreate={handleCreateTeam}
-              currentUserId={currentUserId || ""}
+              currentUserId={userId || ""}
             />
           </>
         )}
