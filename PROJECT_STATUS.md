@@ -26,6 +26,8 @@ _Last updated: 2025-04-21 15:36 EDT_
 - [ ] More robust match/challenge logic
 - [ ] Improved onboarding polish
 - [ ] Real-vs-demo data handling
+- [ ] Create a Team Profile page (view team info, members, stats)
+- [ ] Improve the team creation process (better UX, validation, member selection)
 
 ## Refactor / Tech Debt
 - [ ] Align Supabase tables with TypeScript interfaces and app flows
@@ -49,5 +51,50 @@ _Last updated: 2025-04-21 15:36 EDT_
 5. Continue feature work or refactor as prioritized above.
 
 ---
+
+## Challenge System Review
+
+### What Could Be Improved
+- Rename the `flowers` table to `challenges` or `matches` for clarity (if possible).
+- Define a specific TypeScript type for the `result` (JSONB) field in the `Flower` interface.
+- Use a TypeScript union or enum for the `status` field in the `Flower` interface (e.g., "pending" | "accepted" | "declined" | "completed").
+- Reflect nullable fields in TypeScript interfaces (e.g., `score?: string | null`, `team_1_id?: string | null`).
+- Standardize naming conventions across interfaces (e.g., `id` vs. `<entity>_id`).
+- Consolidate challenge-related types/interfaces in a central location to avoid duplication.
+- Ensure as much business logic as possible is in the backend (Supabase functions) to prevent cheating or inconsistency.
+- Add or improve unit/integration tests for challenge flows (creation, acceptance, decline, scoring) both backend and frontend.
+
+### What Might Be Missing
+- Add an audit log table for challenge actions (who created/accepted/declined, when).
+- Add logic for expiring stale challenges (e.g., auto-decline after X days).
+- Implement notifications (push, email, or in-app) for challenge events.
+- Ensure only authorized users can create/accept/decline challenges (use the `user_roles` table and enforce in code/backend).
+- Make sure all Supabase errors are handled gracefully in the UI.
+- Document challenge flows, both in code and in a developer README.
+- Validate all user inputs before sending to Supabase (e.g., don’t allow challenges with missing IDs, invalid scores, etc.).
+- Consider versioning Supabase functions or endpoints if challenge logic changes.
+
+
+## App Code Review
+
+### What Could Be Improved
+- Ensure all major data flows use TypeScript interfaces/types, especially for navigation params, API responses, and context.
+- Use stricter types for all props and state; avoid `any` except where truly necessary.
+- Consider a more robust state management solution (React Context, Zustand, Jotai) as the app grows.
+- Audit for duplicate UI logic or styles; move repeated patterns into shared components.
+- Add unit and integration tests for business logic, reducers, and critical UI flows.
+- Ensure all async calls (especially Supabase and navigation) have comprehensive error handling and user feedback.
+- Move all secrets/keys to environment variables and enforce user roles/permissions in both UI and backend.
+- For large data sets (ladders, matches), implement pagination or lazy loading.
+- Optimize images and assets for performance.
+- Audit for accessibility (labels, focus order, color contrast) and ensure responsive layouts.
+
+### What Might Be Missing
+- Automated testing setup (test/ directory, test scripts).
+- CI/CD configuration for builds, linting, and deployment.
+- Comprehensive documentation (README.md with setup, architecture, contribution guidelines).
+- Analytics and error monitoring (e.g., Sentry).
+- Internationalization (i18n) support if needed.
+- Complete user settings/preferences coverage.
 
 **Tip:** Update this file as you make progress or switch machines to keep track of your work!
