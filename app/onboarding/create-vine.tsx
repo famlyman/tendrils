@@ -7,6 +7,9 @@ import { supabase } from "../../supabase";
 import BackgroundWrapper from "../../components/BackgroundWrapper";
 import { COLORS, TYPOGRAPHY } from "../../constants/theme";
 import { LinearGradient } from "expo-linear-gradient";
+import uuid from 'react-native-uuid';
+
+const generateRandomUUID = () => uuid.v4();
 
 const generateRandomCode = () => {
   const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -62,89 +65,108 @@ export default function CreateVine() {
     console.log("Input - Vine Name:", vineName, "Is Private:", isPrivate);
 
     if (!vineName) {
-      console.log("Validation failed: Vine name is missing");
-      alert("Please enter a vine name.");
-      return;
+        console.log("Validation failed: Vine name is missing");
+        alert("Please enter a vine name.");
+        return;
     }
 
     setLoading(true);
     try {
-      console.log("Fetching session...");
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        console.log("Session error:", sessionError.message);
-        alert(`Error fetching session: ${sessionError.message}`);
-        return;
-      }
-      if (!session) {
-        console.log("No session found - redirecting to signup");
-        alert("You must be logged in to create a vine.");
-        router.push("/signup");
-        return;
-      }
-      console.log("Session retrieved:", session.user.id);
+        console.log("Fetching session...");
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+            console.log("Session error:", sessionError.message);
+            alert(`Error fetching session: ${sessionError.message}`);
+            return;
+        }
+        if (!session) {
+            console.log("No session found - redirecting to signup");
+            alert("You must be logged in to create a vine.");
+            router.push("/signup");
+            return;
+        }
+        console.log("Session retrieved:", session.user.id);
 
-      let joinCode = null;
-      if (isPrivate) {
-        console.log("Generating join code for private vine...");
-        let attempts = 0;
-        const maxAttempts = 10;
-        let isUnique = false;
+        let joinCode = null;
+        if (isPrivate) {
+            console.log("Generating join code for private vine...");
+            let attempts = 0;
+            const maxAttempts = 10;
+            let isUnique = false;
 
-        while (!isUnique && attempts < maxAttempts) {
-          joinCode = generateRandomCode();
-          console.log(`Attempt ${attempts + 1}: Generated join code: ${joinCode}`);
+            while (!isUnique && attempts < maxAttempts) {
+                joinCode = generateRandomCode();
+                console.log(`Attempt ${attempts + 1}: Generated join code: ${joinCode}`);
 
-          const { data, error } = await supabase
+                const { data, error } = await supabase
+                    .from("vines")
+                    .select("vine_id")
+                    .eq("join_code", joinCode)
+                    .maybeSingle();
+
+                if (error) {
+                    console.log("Error checking join code:", error.message);
+                    throw new Error(`Error checking join code: ${error.message}`);
+                }
+
+                isUnique = !data;
+                attempts++;
+            }
+
+            if (!isUnique) {
+                console.log("Failed to generate a unique join code after", maxAttempts, "attempts");
+                throw new Error("Unable to generate a unique join code. Please try again.");
+            }
+            console.log("Unique join code generated:", joinCode);
+        }
+
+        console.log("Inserting new vine...");
+        const { data: vineData, error: vineError } = await supabase
             .from("vines")
-            .select("vine_id")
-            .eq("join_code", joinCode)
-            .maybeSingle();
+            .insert({
+                name: vineName,
+                is_public: !isPrivate,
+                join_code: joinCode,
+                coordinator_id: session.user.id,
+            })
+            .select()
+            .single();
 
-          if (error) {
-            console.log("Error checking join code:", error.message);
-            throw new Error(`Error checking join code: ${error.message}`);
-          }
-
-          isUnique = !data;
-          attempts++;
+        if (vineError) {
+            console.log("Vine insert error:", vineError.message, vineError.code);
+            throw new Error(`Error creating vine: ${vineError.message}`);
         }
+        console.log("Vine created:", vineData);
 
-        if (!isUnique) {
-          console.log("Failed to generate a unique join code after", maxAttempts, "attempts");
-          throw new Error("Unable to generate a unique join code. Please try again.");
+        // Insert user_roles row for coordinator
+        console.log("Inserting user_roles row for coordinator...");
+        const { data: roleData, error: roleError } = await supabase
+    .from("user_roles")
+    .insert({
+        id: uuid.v4(), // Use react-native-uuid
+        user_id: session.user.id,
+        vine_id: vineData.vine_id,
+        role: (await supabase.from("roles").select("id").eq("name", "coordinator").single()).data?.id,
+    })
+    .select()
+    .single();
+
+        if (roleError) {
+            console.log("User roles insert error:", roleError.message, roleError.code);
+            throw new Error(`Error assigning coordinator role: ${roleError.message}`);
         }
-        console.log("Unique join code generated:", joinCode);
-      }
+        console.log("Coordinator role assigned:", roleData);
 
-      console.log("Inserting new vine...");
-      const { data: vineData, error: vineError } = await supabase
-        .from("vines")
-        .insert({
-          name: vineName,
-          is_public: !isPrivate,
-          join_code: joinCode,
-          coordinator_id: session.user.id,
-        })
-        .select()
-        .single();
-
-      if (vineError) {
-        console.log("Vine insert error:", vineError.message, vineError.code);
-        throw new Error(`Error creating vine: ${vineError.message}`);
-      }
-      console.log("Vine created:", vineData);
-
-      console.log("Navigating to profile setup with vineId:", vineData.vine_id);
-      router.push({ pathname: "/onboarding/profile", params: { vine_id: vineData.vine_id } });
+        console.log("Navigating to profile setup with vineId:", vineData.vine_id);
+        router.push({ pathname: "/onboarding/profile", params: { vine_id: vineData.vine_id } });
     } catch (e) {
-      console.error("Unexpected error during vine creation:", e);
-      alert(`An error occurred: ${(e as Error).message || "Unknown error"}`);
+        console.error("Unexpected error during vine creation:", e);
+        alert(`An error occurred: ${(e as Error).message || "Unknown error"}`);
     } finally {
-      setLoading(false);
-      console.log("Vine creation completed (success or failure)");
+        setLoading(false);
+        console.log("Vine creation completed (success or failure)");
     }
-  };
+};
 
   return (
     <BackgroundWrapper>
