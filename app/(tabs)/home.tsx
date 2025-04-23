@@ -2,6 +2,18 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert } from "react-native";
 import { COLORS, TYPOGRAPHY } from "../../constants/theme";
+// Ensure all theme variables exist at the top
+type ColorsType = typeof COLORS & {
+  primaryGradient: readonly string[];
+  secondary: string;
+  text: { dark: string };
+};
+const safeCOLORS: ColorsType = {
+  ...(COLORS || {}),
+  primaryGradient: COLORS.primaryGradient || ["#FFD54F", "#FFC107"],
+  secondary: COLORS.secondary || "#1A3C34",
+  text: COLORS.text || { dark: "#333" },
+};
 import { supabase } from "../../supabase";
 import { useRouter } from "expo-router";
 import { useAuth } from "../../context/AuthContext";
@@ -33,6 +45,107 @@ interface TeamProfile {
 
 type ChallengeTarget = PlayerProfile | TeamProfile | null;
 
+const styles = StyleSheet.create({
+  challengeBtn: {
+    marginLeft: 'auto',
+    backgroundColor: safeCOLORS.primaryGradient[1],
+    borderRadius: 16,
+    padding: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  singlesCard: {
+    flexDirection: 'column',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 18,
+    marginVertical: 8,
+    elevation: 2,
+    width: '100%',
+    alignSelf: 'stretch',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    marginHorizontal: 0,
+  },
+  container: {
+    flex: 1,
+    justifyContent: "flex-start",
+    alignItems: "stretch",
+    paddingTop: 40,
+  },
+  segmentedControl: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginBottom: 16,
+    borderRadius: 16,
+    backgroundColor: "#D0F2E8",
+  },
+  segment: {
+    flex: 1,
+    padding: 12,
+    alignItems: "center",
+    borderRadius: 16,
+  },
+  segmentActive: {
+    backgroundColor: "#FFD54F",
+  },
+  segmentText: {
+    fontFamily: "Roboto-Regular",
+    color: "#1A3C34",
+    fontSize: 16,
+  },
+  segmentTextActive: {
+    fontFamily: "Roboto-Bold",
+    color: "#1A3C34",
+  },
+  createTeamBtn: {
+    backgroundColor: "#FFD54F",
+    borderRadius: 20,
+    alignSelf: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 28,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  createTeamBtnText: {
+    color: "#1A3C34",
+    fontFamily: "Roboto-Bold",
+    fontSize: 16,
+  },
+  doublesCard: {
+    flexDirection: 'column',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 18,
+    marginVertical: 8,
+    elevation: 2,
+    width: '100%',
+    alignSelf: 'stretch',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    marginHorizontal: 0,
+  },
+  rank: {
+    fontSize: 18,
+    fontWeight: "bold",
+    width: 30,
+    textAlign: "center",
+    color: safeCOLORS.secondary,
+  },
+  name: {
+    fontSize: 16,
+    flex: 1,
+    marginLeft: 12,
+    color: safeCOLORS.text.dark,
+  },
+  rating: {
+    fontSize: 15,
+    color: safeCOLORS.text.dark,
+    marginLeft: 12,
+    marginTop: 2,
+  },
+});
+
 export default function Home() {
   const [challengeTarget, setChallengeTarget] = useState<ChallengeTarget>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -50,30 +163,50 @@ export default function Home() {
   const [selectedLadder, setSelectedLadder] = useState<any>(null);
 
   const fetchLadders = useCallback(async () => {
+    console.log('[DEBUG] Fetching ladders...');
     try {
       const { data, error } = await supabase.from("ladders").select("*");
       if (error) throw error;
+      console.log('[DEBUG] Ladders fetched:', data);
       setLadders(data || []);
       setSelectedLadder(data?.[0] || null);
+      console.log('[DEBUG] Selected ladder:', data?.[0] || null);
     } catch (error) {
       console.error("Error fetching ladders:", error);
     }
   }, []);
 
 
-  // Fetch user profile (with role)
-  useEffect(() => {
-    if (!userId) return;
-    const fetchProfile = async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('user_id', userId)
-        .single();
-      if (!error && data) setUserProfile(data);
+  // Fetch user role from user_roles and join with roles table to get role name
+useEffect(() => {
+  if (!userId) return;
+  const fetchUserRole = async () => {
+    type UserRoleJoined = {
+      role: { name: string }[] | null;
     };
-    fetchProfile();
-  }, [userId]);
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('role:roles(name)')
+      .eq('user_id', userId);
+    const roles = data as UserRoleJoined[];
+    if (
+      !error &&
+      roles &&
+      roles.length > 0 &&
+      roles[0].role &&
+      Array.isArray(roles[0].role) &&
+      roles[0].role.length > 0 &&
+      roles[0].role[0].name
+    ) {
+      setUserProfile({ role: roles[0].role[0].name });
+      console.log('[DEBUG] User role fetched from user_roles/roles:', roles[0].role[0].name);
+    } else {
+      setUserProfile(null);
+      console.log('[DEBUG] Error fetching user role from user_roles/roles:', error, roles?.[0]?.role);
+    }
+  };
+  fetchUserRole();
+}, [userId]);
 
   useEffect(() => { fetchLadders(); }, [fetchLadders]);
   // Fetch vineId once on login
@@ -91,16 +224,20 @@ export default function Home() {
           .eq("user_id", userId)
           .single();
         if (profileError || !profile?.vine_id) {
+          console.log('[DEBUG] Error fetching vine or missing vine_id:', profileError, profile);
           Alert.alert("Error", "You must join a vine first.");
           setLoading(false);
           return;
         }
         setVineId(profile.vine_id);
+        console.log('[DEBUG] Vine ID fetched:', profile.vine_id);
       } catch (e) {
+        console.log('[DEBUG] Unexpected error fetching vine:', e);
         Alert.alert("Error", "An unexpected error occurred.");
       }
     };
     fetchVine();
+    console.log('[DEBUG] useEffect [userId, authLoading]: userId:', userId, 'authLoading:', authLoading);
   }, [userId, authLoading]);
 
   // Fetch standings when selectedLadder changes
@@ -122,7 +259,9 @@ export default function Home() {
           .is("team_id", null)
           .order("position", { ascending: true });
         if (singlesError) {
+          console.log('[DEBUG] Singles standings error:', singlesError);
           setSinglesStandings([]);
+          console.log('[DEBUG] Singles standings set to empty.');
         } else {
           const singles = (singlesData || []).map((item: any) => ({
             user_id: item.user_id,
@@ -133,6 +272,7 @@ export default function Home() {
             position: item.position,
           }));
           setSinglesStandings(singles);
+          console.log('[DEBUG] Singles standings:', singles);
         }
         // Doubles
         const { data: doublesData, error: doublesError } = await supabase
@@ -147,7 +287,9 @@ export default function Home() {
           .is("user_id", null)
           .order("position", { ascending: true });
         if (doublesError) {
+          console.log('[DEBUG] Doubles standings error:', doublesError);
           setDoublesStandings([]);
+          console.log('[DEBUG] Doubles standings set to empty.');
         } else {
           const teamsData = await Promise.all(
             (doublesData || []).map(async (item: any) => {
@@ -167,6 +309,7 @@ export default function Home() {
             })
           );
           setDoublesStandings(teamsData);
+          console.log('[DEBUG] Doubles standings:', teamsData);
         }
         // Fetch user's teams
         const { data: userTeamsData } = await supabase
@@ -174,6 +317,7 @@ export default function Home() {
           .select("team_id")
           .eq("user_id", userId);
         setUserTeams(userTeamsData?.map((t: any) => t.team_id) || []);
+        console.log('[DEBUG] User teams:', userTeamsData?.map((t: any) => t.team_id) || []);
       } catch (e) {
         setSinglesStandings([]);
         setDoublesStandings([]);
@@ -370,12 +514,12 @@ export default function Home() {
     } catch (e) {
       console.log("Unexpected error:", e);
       Alert.alert("Error", "Failed to send challenge.");
-    } finally {
-      setChallengeTarget(null);
     }
   };
 
+  console.log('[DEBUG] Render: loading =', loading, 'userProfile =', userProfile, 'singlesStandings =', singlesStandings, 'doublesStandings =', doublesStandings, 'ladders =', ladders, 'selectedLadder =', selectedLadder, 'vineId =', vineId, 'segment =', segment);
   if (loading) {
+    console.log('[DEBUG] Rendering loading spinner...');
     return (
       <BackgroundWrapper>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -385,8 +529,20 @@ export default function Home() {
     );
   }
 
+  // Show fallback UI if no standings found
+  const noStandings = (segment === "Singles" && singlesStandings.length === 0) ||
+                      (segment === "Doubles" && doublesStandings.length === 0);
+  console.log('[DEBUG] noStandings:', noStandings, 'segment:', segment, 'singlesStandings.length:', singlesStandings.length, 'doublesStandings.length:', doublesStandings.length);
+
   return (
     <BackgroundWrapper>
+      {noStandings && (
+        <View style={{ padding: 24, alignItems: 'center' }}>
+          <Text style={{ color: '#888', fontSize: 18, marginVertical: 16 }}>
+            No {segment.toLowerCase()} standings found.
+          </Text>
+        </View>
+      )}
       {/* Challenge Modal */}
       {challengeTarget && (
         <Modal
@@ -419,9 +575,9 @@ export default function Home() {
                   </Text>
                 </>
               ) : null}
-              <View style={{ flexDirection: 'row', gap: 16 }}>
+              <View style={{ flexDirection: 'row' }}>
                 <TouchableOpacity
-                  style={{ paddingVertical: 8, paddingHorizontal: 18, backgroundColor: COLORS.primaryGradient[1], borderRadius: 8, marginRight: 8 }}
+                  style={{ paddingVertical: 8, paddingHorizontal: 18, backgroundColor: safeCOLORS.primaryGradient[1], borderRadius: 8, marginRight: 8 }}
                   onPress={handleChallenge}
                 >
                   <Text style={{ color: '#fff', fontWeight: 'bold' }}>Send Challenge</Text>
@@ -430,7 +586,7 @@ export default function Home() {
                   style={{ paddingVertical: 8, paddingHorizontal: 18, backgroundColor: '#eee', borderRadius: 8 }}
                   onPress={() => setChallengeTarget(null)}
                 >
-                  <Text style={{ color: COLORS.secondary, fontWeight: 'bold' }}>Cancel</Text>
+                  <Text style={{ color: safeCOLORS.secondary, fontWeight: 'bold' }}>Cancel</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -512,104 +668,3 @@ export default function Home() {
     </BackgroundWrapper>
   );
 }
-
-const styles = StyleSheet.create({
-  challengeBtn: {
-    marginLeft: 'auto',
-    backgroundColor: '#F8E71C22',
-    borderRadius: 16,
-    padding: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  singlesCard: {
-    flexDirection: 'column',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 18,
-    marginVertical: 8,
-    elevation: 2,
-    width: '100%',
-    alignSelf: 'stretch',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    marginHorizontal: 0,
-  },
-  container: {
-    flex: 1,
-    justifyContent: "flex-start",
-    alignItems: "stretch",
-    paddingTop: 40,
-  },
-  segmentedControl: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginBottom: 16,
-    borderRadius: 16,
-    backgroundColor: "#D0F2E8",
-  },
-  segment: {
-    flex: 1,
-    padding: 12,
-    alignItems: "center",
-    borderRadius: 16,
-  },
-  segmentActive: {
-    backgroundColor: "#FFD54F",
-  },
-  segmentText: {
-    fontFamily: "Roboto-Regular",
-    color: "#1A3C34",
-    fontSize: 16,
-  },
-  segmentTextActive: {
-    fontFamily: "Roboto-Bold",
-    color: "#1A3C34",
-  },
-  createTeamBtn: {
-    backgroundColor: "#FFD54F",
-    borderRadius: 20,
-    alignSelf: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 28,
-    marginTop: 10,
-    marginBottom: 4,
-  },
-  createTeamBtnText: {
-    color: "#1A3C34",
-    fontFamily: "Roboto-Bold",
-    fontSize: 16,
-  },
-  doublesCard: {
-    flexDirection: 'column',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 18,
-    marginVertical: 8,
-    elevation: 2,
-    width: '100%',
-    alignSelf: 'stretch',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    marginHorizontal: 0,
-  },
-  rank: {
-    fontSize: 18,
-    fontWeight: "bold",
-    width: 30,
-    textAlign: "center",
-    color: COLORS.secondary,
-  },
-  name: {
-    fontSize: 16,
-    flex: 1,
-    marginLeft: 12,
-    color: COLORS.text.dark,
-  },
-  rating: {
-    fontSize: 15,
-    color: COLORS.text.dark,
-    marginLeft: 12,
-    marginTop: 2,
-  },
-});
