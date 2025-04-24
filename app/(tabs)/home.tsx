@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert } from "react-native";
 import { COLORS, TYPOGRAPHY } from "../../constants/theme";
 
-// Ensure all theme variables exist at the top
 type ColorsType = typeof COLORS & {
   primaryGradient: readonly string[];
   secondary: string;
@@ -47,6 +46,12 @@ interface TeamProfile {
 
 interface UserRoleResponse {
   role: { name: string } | null;
+}
+
+interface Ladder {
+  ladder_id: string;
+  name: string;
+  type: string;
 }
 
 type ChallengeTarget = PlayerProfile | TeamProfile | null;
@@ -164,107 +169,112 @@ export default function Home() {
   const router = useRouter();
   const { userId, loading: authLoading } = useAuth();
   const [userProfile, setUserProfile] = useState<{ role: string } | null>(null);
-  const [ladders, setLadders] = useState<any[]>([]);
-  const [selectedLadder, setSelectedLadder] = useState<any>(null);
+  const [ladders, setLadders] = useState<Ladder[]>([]);
+  const [selectedLadder, setSelectedLadder] = useState<Ladder | null>(null);
 
   const fetchLadders = useCallback(async () => {
-    try {
-        // Step 1: Fetch ladder_ids from user_ladder_nodes for the vine
-        const { data: nodeData, error: nodeError } = await supabase
-            .from('user_ladder_nodes')
-            .select('ladder_id')
-            .eq('vine_id', vineId);
-
-        if (nodeError) {
-            console.error('[DEBUG] Error fetching ladder_ids from user_ladder_nodes:', nodeError);
-            setLadders([]);
-            return;
-        }
-
-        if (!nodeData || nodeData.length === 0) {
-            console.log('[DEBUG] No ladders found in user_ladder_nodes for vine_id:', vineId);
-            setLadders([]);
-            return;
-        }
-
-        const ladderIds = nodeData.map((node: { ladder_id: string }) => node.ladder_id);
-
-        // Step 2: Fetch ladders with seasons
-        const { data, error } = await supabase
-            .from('ladders')
-            .select('*, seasons!inner(ladder_id)')
-            .in('ladder_id', ladderIds);
-
-        if (error) {
-            console.error('[DEBUG] Error fetching ladders:', error);
-            setLadders([]);
-            return;
-        }
-
-        console.log('[DEBUG] Ladders fetched:', data);
-        setLadders(data);
-        if (data.length > 0 && !selectedLadder) {
-            setSelectedLadder(data[0]);
-        }
-    } catch (e) {
-        console.error('[DEBUG] Unexpected error in fetchLadders:', e);
-        setLadders([]);
+    console.log('[DEBUG] fetchLadders called, vineId:', vineId, 'userId:', userId);
+    if (!vineId || !userId) {
+      console.log('[DEBUG] fetchLadders skipped: vineId or userId is null');
+      setLadders([]);
+      return;
     }
-}, [vineId, selectedLadder]);
+    try {
+      // Diagnostic query without user_id to test RLS
+      const { data: allNodes, error: allNodesError } = await supabase
+        .from('user_ladder_nodes')
+        .select('ladder_id, user_id, vine_id')
+        .eq('vine_id', vineId);
+      console.log('[DEBUG] Diagnostic user_ladder_nodes (no user_id):', { data: allNodes, error: allNodesError });
 
-const hasFetchedLadders = React.useRef(false);
+      // Main query with user_id
+      const { data: nodeData, error: nodeError } = await supabase
+        .from('user_ladder_nodes')
+        .select('ladder_id')
+        .eq('vine_id', vineId)
+        .eq('user_id', userId);
+      console.log('[DEBUG] user_ladder_nodes query:', { vine_id: vineId, user_id: userId });
+      console.log('[DEBUG] user_ladder_nodes result:', nodeData, 'error:', nodeError);
 
-useEffect(() => {
-    if (!vineId || hasFetchedLadders.current) return;
-    hasFetchedLadders.current = true;
-    fetchLadders();
-}, [vineId, fetchLadders]);
+      if (nodeError) {
+        console.error('[DEBUG] Error fetching ladder_ids from user_ladder_nodes:', nodeError);
+        setLadders([]);
+        return;
+      }
+      if (!nodeData || nodeData.length === 0) {
+        console.log('[DEBUG] No ladders found in user_ladder_nodes for vine_id:', vineId, 'userId:', userId);
+        setLadders([]);
+        // Allow coordinators to proceed without ladders
+        if (userProfile?.role === 'coordinator') {
+          setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
+        }
+        return;
+      }
 
-const fetchUserRole = useCallback(async () => {
-  if (!userId || !vineId) {
+      const ladderIds = [...new Set(nodeData.map((node: { ladder_id: string }) => node.ladder_id))]; // Deduplicate
+      const { data: ladderData, error: ladderError } = await supabase
+        .from('ladders')
+        .select('ladder_id, name, type')
+        .in('ladder_id', ladderIds);
+      console.log('[DEBUG] ladders query:', { ladder_ids: ladderIds });
+      console.log('[DEBUG] ladders result:', ladderData, 'error:', ladderError);
+
+      if (ladderError) {
+        console.error('[DEBUG] Error fetching ladders:', ladderError);
+        setLadders([]);
+        return;
+      }
+      if (!ladderData || ladderData.length === 0) {
+        console.log('[DEBUG] No ladder details found for ladder_ids:', ladderIds);
+        setLadders([]);
+        if (userProfile?.role === 'coordinator') {
+          setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
+        }
+        return;
+      }
+
+      setLadders(ladderData);
+      if (!selectedLadder && ladderData.length > 0) {
+        setSelectedLadder(ladderData[0]);
+        console.log('[DEBUG] Auto-selected ladder:', ladderData[0]);
+      }
+    } catch (e) {
+      console.error('[DEBUG] Unexpected error in fetchLadders:', e);
+      setLadders([]);
+      if (userProfile?.role === 'coordinator') {
+        setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
+      }
+    }
+  }, [vineId, userId, userProfile, selectedLadder]);
+
+  const fetchUserRole = useCallback(async () => {
+    if (!userId || !vineId) {
       console.log('[DEBUG] fetchUserRole skipped: userId or vineId is null');
       setUserProfile({ role: 'none' });
       return;
-  }
-
-  try {
+    }
+    try {
       const { data, error } = await supabase
-          .from('user_roles')
-          .select('role:roles(name)')
-          .eq('user_id', userId)
-          .eq('vine_id', vineId)
-          .single() as { data: UserRoleResponse | null; error: any };
-
+        .from('user_roles')
+        .select('role:roles(name)')
+        .eq('user_id', userId)
+        .eq('vine_id', vineId)
+        .single() as { data: UserRoleResponse | null; error: any };
       if (error) {
-          console.error('[DEBUG] Error fetching user role:', error);
-          setUserProfile({ role: 'none' });
-          Alert.alert('Error', 'Failed to fetch user role.');
-          return;
+        console.error('[DEBUG] Error fetching user role:', error);
+        setUserProfile({ role: 'none' });
+        Alert.alert('Error', 'Failed to fetch user role.');
+        return;
       }
-
       const roleName = data?.role?.name || 'none';
       console.log('[DEBUG] User role fetched:', data, 'Role name:', roleName);
       setUserProfile({ role: roleName });
-  } catch (e) {
+    } catch (e) {
       console.error('[DEBUG] Unexpected error fetching user role:', e);
       setUserProfile({ role: 'none' });
       Alert.alert('Error', 'Failed to fetch user role.');
-  }
-}, [userId, vineId]);
-
-useEffect(() => {
-  if (!userId || !vineId) return;
-  fetchUserRole();
-}, [userId, vineId, fetchUserRole]); 
-
-  useEffect(() => {
-    if (!userId) return;
-    fetchUserRole();
-  }, [userId]);
-
-  useEffect(() => {
-    fetchLadders();
-  }, [fetchLadders]);
+    }
+  }, [userId, vineId]);
 
   useEffect(() => {
     if (authLoading) {
@@ -276,7 +286,8 @@ useEffect(() => {
       router.replace("/login");
       return;
     }
-    const fetchVine = async () => {
+
+    const initialize = async () => {
       try {
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
@@ -292,17 +303,26 @@ useEffect(() => {
         setVineId(profile.vine_id);
         console.log('[DEBUG] Vine ID fetched:', profile.vine_id);
       } catch (e) {
-        console.error('[DEBUG] Unexpected error fetching vine:', e);
+        console.error('[DEBUG] Unexpected error initializing:', e);
         Alert.alert("Error", "An unexpected error occurred.");
+      } finally {
         setLoading(false);
       }
     };
-    fetchVine();
+
+    initialize();
     console.log('[DEBUG] useEffect [userId, authLoading]: userId:', userId, 'authLoading:', authLoading);
   }, [userId, authLoading]);
 
   useEffect(() => {
-    if (!selectedLadder || !vineId) {
+    if (vineId && userId) {
+      fetchUserRole();
+      fetchLadders();
+    }
+  }, [vineId, userId]);
+
+  useEffect(() => {
+    if (!selectedLadder || !vineId || !userId) {
       setLoading(false);
       return;
     }
@@ -395,12 +415,53 @@ useEffect(() => {
         setLoading(false);
       }
     };
-    fetchStandings();
+    if (selectedLadder.ladder_id !== 'none') {
+      fetchStandings();
+    } else {
+      setLoading(false);
+    }
   }, [selectedLadder, vineId, userId]);
+
+  const handleCreateLadder = async () => {
+    if (!vineId || !userId) {
+      Alert.alert("Error", "Missing vine or user information.");
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('ladders')
+        .insert({
+          vine_id: vineId,
+          name: `Ladder for ${userProfile?.role === 'coordinator' ? 'Coordinator' : 'User'}`,
+          type: 'singles',
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      await supabase
+        .from('user_ladder_nodes')
+        .insert({
+          user_id: userId,
+          ladder_id: data.ladder_id,
+          vine_id: vineId,
+          position: 1,
+        });
+      setLadders([{ ladder_id: data.ladder_id, name: data.name, type: data.type }]);
+      setSelectedLadder({ ladder_id: data.ladder_id, name: data.name, type: data.type });
+      Alert.alert("Success", "Ladder created!");
+    } catch (e) {
+      console.error('[DEBUG] Error creating ladder:', e);
+      Alert.alert("Error", "Failed to create ladder.");
+    }
+  };
 
   const handleJoinLadder = async () => {
     if (!selectedLadder || !vineId) {
       Alert.alert("Error", "No ladder or vine selected.");
+      return;
+    }
+    if (selectedLadder.ladder_id === 'none') {
+      Alert.alert("Error", "Please create a ladder first.");
       return;
     }
     try {
@@ -409,6 +470,7 @@ useEffect(() => {
           user_id: userId,
           ladder_id: selectedLadder.ladder_id,
           position: singlesStandings.length + 1,
+          vine_id: vineId,
         });
         if (error) throw error;
         Alert.alert("Success", "You have joined the ladder!");
@@ -421,6 +483,7 @@ useEffect(() => {
           team_id: userTeams[0],
           ladder_id: selectedLadder.ladder_id,
           position: doublesStandings.length + 1,
+          vine_id: vineId,
         });
         if (error) throw error;
         Alert.alert("Success", "Your team has joined the ladder!");
@@ -434,7 +497,7 @@ useEffect(() => {
   };
 
   const handleRemoveFromLadder = async (item: any) => {
-    if (!selectedLadder) return;
+    if (!selectedLadder || selectedLadder.ladder_id === 'none') return;
     Alert.alert(
       "Remove from Ladder",
       `Are you sure you want to remove ${item.name} from this ladder?`,
@@ -454,15 +517,9 @@ useEffect(() => {
               } else if (segment === "Doubles" && "team_id" in item) {
                 await supabase
                   .from("user_ladder_nodes")
-  .select(`
-    team_id,
-    position,
-    teams (name),
-    fruit_records!node_id (wins, losses)
-  `)
-  .eq("ladder_id", selectedLadder.ladder_id)
-  .is("user_id", null)
-  .order("position", { ascending: true });
+                  .delete()
+                  .eq("team_id", item.team_id)
+                  .eq("ladder_id", selectedLadder.ladder_id);
               }
               setLoading(true);
               setSelectedLadder({ ...selectedLadder });
@@ -632,18 +689,6 @@ useEffect(() => {
     );
   }
 
-  if (!selectedLadder) {
-    return (
-      <BackgroundWrapper>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ color: '#888', fontSize: 18 }}>
-            No ladder selected. Please select or create a ladder.
-          </Text>
-        </View>
-      </BackgroundWrapper>
-    );
-  }
-
   if (!userProfile) {
     return (
       <BackgroundWrapper>
@@ -663,6 +708,26 @@ useEffect(() => {
           <Text style={{ color: '#888', fontSize: 18 }}>
             No role assigned. Please contact your coordinator.
           </Text>
+        </View>
+      </BackgroundWrapper>
+    );
+  }
+
+  if (!selectedLadder) {
+    return (
+      <BackgroundWrapper>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ color: '#888', fontSize: 18 }}>
+            No ladder selected. Please select or create a ladder.
+          </Text>
+          {userProfile.role === 'coordinator' && (
+            <TouchableOpacity
+              style={styles.createTeamBtn}
+              onPress={handleCreateLadder}
+            >
+              <Text style={styles.createTeamBtnText}>+ Create Ladder</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </BackgroundWrapper>
     );
