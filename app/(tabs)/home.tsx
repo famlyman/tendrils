@@ -173,9 +173,9 @@ export default function Home() {
   const [selectedLadder, setSelectedLadder] = useState<Ladder | null>(null);
 
   const fetchLadders = useCallback(async () => {
-    console.log('[DEBUG] fetchLadders called, vineId:', vineId, 'userId:', userId);
+    
     if (!vineId || !userId) {
-      console.log('[DEBUG] fetchLadders skipped: vineId or userId is null');
+      
       setLadders([]);
       return;
     }
@@ -185,7 +185,7 @@ export default function Home() {
         .from('user_ladder_nodes')
         .select('ladder_id, user_id, vine_id')
         .eq('vine_id', vineId);
-      console.log('[DEBUG] Diagnostic user_ladder_nodes (no user_id):', { data: allNodes, error: allNodesError });
+      
 
       // Main query with user_id
       const { data: nodeData, error: nodeError } = await supabase
@@ -193,16 +193,15 @@ export default function Home() {
         .select('ladder_id')
         .eq('vine_id', vineId)
         .eq('user_id', userId);
-      console.log('[DEBUG] user_ladder_nodes query:', { vine_id: vineId, user_id: userId });
-      console.log('[DEBUG] user_ladder_nodes result:', nodeData, 'error:', nodeError);
+      
 
       if (nodeError) {
-        console.error('[DEBUG] Error fetching ladder_ids from user_ladder_nodes:', nodeError);
+        // (error logging removed for production)'[DEBUG] Error fetching ladder_ids from user_ladder_nodes:', nodeError);
         setLadders([]);
         return;
       }
       if (!nodeData || nodeData.length === 0) {
-        console.log('[DEBUG] No ladders found in user_ladder_nodes for vine_id:', vineId, 'userId:', userId);
+        
         setLadders([]);
         // Allow coordinators to proceed without ladders
         if (userProfile?.role === 'coordinator') {
@@ -216,16 +215,15 @@ export default function Home() {
         .from('ladders')
         .select('ladder_id, name, type')
         .in('ladder_id', ladderIds);
-      console.log('[DEBUG] ladders query:', { ladder_ids: ladderIds });
-      console.log('[DEBUG] ladders result:', ladderData, 'error:', ladderError);
+      
 
       if (ladderError) {
-        console.error('[DEBUG] Error fetching ladders:', ladderError);
+        // (error logging removed for production)'[DEBUG] Error fetching ladders:', ladderError);
         setLadders([]);
         return;
       }
       if (!ladderData || ladderData.length === 0) {
-        console.log('[DEBUG] No ladder details found for ladder_ids:', ladderIds);
+        
         setLadders([]);
         if (userProfile?.role === 'coordinator') {
           setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
@@ -236,10 +234,10 @@ export default function Home() {
       setLadders(ladderData);
       if (!selectedLadder && ladderData.length > 0) {
         setSelectedLadder(ladderData[0]);
-        console.log('[DEBUG] Auto-selected ladder:', ladderData[0]);
+        
       }
     } catch (e) {
-      console.error('[DEBUG] Unexpected error in fetchLadders:', e);
+      // (error logging removed for production)'[DEBUG] Unexpected error in fetchLadders:', e);
       setLadders([]);
       if (userProfile?.role === 'coordinator') {
         setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
@@ -249,7 +247,7 @@ export default function Home() {
 
   const fetchUserRole = useCallback(async () => {
     if (!userId || !vineId) {
-      console.log('[DEBUG] fetchUserRole skipped: userId or vineId is null');
+      
       setUserProfile({ role: 'none' });
       return;
     }
@@ -261,16 +259,16 @@ export default function Home() {
         .eq('vine_id', vineId)
         .single() as { data: UserRoleResponse | null; error: any };
       if (error) {
-        console.error('[DEBUG] Error fetching user role:', error);
+        // (error logging removed for production)'[DEBUG] Error fetching user role:', error);
         setUserProfile({ role: 'none' });
         Alert.alert('Error', 'Failed to fetch user role.');
         return;
       }
       const roleName = data?.role?.name || 'none';
-      console.log('[DEBUG] User role fetched:', data, 'Role name:', roleName);
+      
       setUserProfile({ role: roleName });
     } catch (e) {
-      console.error('[DEBUG] Unexpected error fetching user role:', e);
+      // (error logging removed for production)'[DEBUG] Unexpected error fetching user role:', e);
       setUserProfile({ role: 'none' });
       Alert.alert('Error', 'Failed to fetch user role.');
     }
@@ -278,11 +276,11 @@ export default function Home() {
 
   useEffect(() => {
     if (authLoading) {
-      console.log('[DEBUG] Auth loading...');
+      
       return;
     }
     if (!userId) {
-      console.log('[DEBUG] No userId, redirecting to login...');
+      
       router.replace("/login");
       return;
     }
@@ -295,15 +293,15 @@ export default function Home() {
           .eq("user_id", userId)
           .single();
         if (profileError || !profile?.vine_id) {
-          console.log('[DEBUG] Error fetching vine or missing vine_id:', profileError, profile);
+          
           Alert.alert("Error", "You must join a vine first.");
           setLoading(false);
           return;
         }
         setVineId(profile.vine_id);
-        console.log('[DEBUG] Vine ID fetched:', profile.vine_id);
+        
       } catch (e) {
-        console.error('[DEBUG] Unexpected error initializing:', e);
+        // (error logging removed for production)'[DEBUG] Unexpected error initializing:', e);
         Alert.alert("Error", "An unexpected error occurred.");
       } finally {
         setLoading(false);
@@ -311,7 +309,7 @@ export default function Home() {
     };
 
     initialize();
-    console.log('[DEBUG] useEffect [userId, authLoading]: userId:', userId, 'authLoading:', authLoading);
+    
   }, [userId, authLoading]);
 
   useEffect(() => {
@@ -329,7 +327,7 @@ export default function Home() {
     setLoading(true);
     const fetchStandings = async () => {
       try {
-        console.log('[DEBUG] Fetching singles standings for ladder_id:', selectedLadder.ladder_id);
+        
         const { data: singlesData, error: singlesError } = await supabase
           .from("user_ladder_nodes")
           .select(`
@@ -342,10 +340,10 @@ export default function Home() {
           .is("team_id", null)
           .order("position", { ascending: true });
         if (singlesError) {
-          console.log('[DEBUG] Singles standings error:', singlesError);
+          
           setSinglesStandings([]);
         } else if (!singlesData || singlesData.length === 0) {
-          console.log('[DEBUG] No singles standings found for ladder_id:', selectedLadder.ladder_id);
+          
           setSinglesStandings([]);
         } else {
           const singles = singlesData.map((item: any) => ({
@@ -357,10 +355,10 @@ export default function Home() {
             position: item.position,
           }));
           setSinglesStandings(singles);
-          console.log('[DEBUG] Singles standings:', singles);
+          
         }
 
-        console.log('[DEBUG] Fetching doubles standings for ladder_id:', selectedLadder.ladder_id);
+        
         const { data: doublesData, error: doublesError } = await supabase
           .from("user_ladder_nodes")
           .select(`
@@ -373,10 +371,10 @@ export default function Home() {
           .is("user_id", null)
           .order("position", { ascending: true });
         if (doublesError) {
-          console.log('[DEBUG] Doubles standings error:', doublesError);
+          
           setDoublesStandings([]);
         } else if (!doublesData || doublesData.length === 0) {
-          console.log('[DEBUG] No doubles standings found for ladder_id:', selectedLadder.ladder_id);
+          
           setDoublesStandings([]);
         } else {
           const teamsData = await Promise.all(
@@ -397,7 +395,7 @@ export default function Home() {
             })
           );
           setDoublesStandings(teamsData);
-          console.log('[DEBUG] Doubles standings:', teamsData);
+          
         }
 
         const { data: userTeamsData } = await supabase
@@ -405,9 +403,9 @@ export default function Home() {
           .select("team_id")
           .eq("user_id", userId);
         setUserTeams(userTeamsData?.map((t: any) => t.team_id) || []);
-        console.log('[DEBUG] User teams:', userTeamsData?.map((t: any) => t.team_id) || []);
+        
       } catch (e) {
-        console.error('[DEBUG] Unexpected error in fetchStandings:', e);
+        // (error logging removed for production)'[DEBUG] Unexpected error in fetchStandings:', e);
         setSinglesStandings([]);
         setDoublesStandings([]);
         Alert.alert("Error", "Failed to fetch standings.");
@@ -450,7 +448,7 @@ export default function Home() {
       setSelectedLadder({ ladder_id: data.ladder_id, name: data.name, type: data.type });
       Alert.alert("Success", "Ladder created!");
     } catch (e) {
-      console.error('[DEBUG] Error creating ladder:', e);
+      // (error logging removed for production)'[DEBUG] Error creating ladder:', e);
       Alert.alert("Error", "Failed to create ladder.");
     }
   };
@@ -491,7 +489,7 @@ export default function Home() {
       setLoading(true);
       setSelectedLadder({ ...selectedLadder });
     } catch (e) {
-      console.error('[DEBUG] Error joining ladder:', e);
+      // (error logging removed for production)'[DEBUG] Error joining ladder:', e);
       Alert.alert("Error", "Failed to join ladder.");
     }
   };
@@ -524,7 +522,7 @@ export default function Home() {
               setLoading(true);
               setSelectedLadder({ ...selectedLadder });
             } catch (e) {
-              console.error('[DEBUG] Error removing from ladder:', e);
+              // (error logging removed for production)'[DEBUG] Error removing from ladder:', e);
               Alert.alert("Error", "Failed to remove from ladder.");
             }
           },
@@ -596,7 +594,7 @@ export default function Home() {
       setUserTeams([...userTeams, teamData.team_id]);
       setModalVisible(false);
     } catch (e) {
-      console.error('[DEBUG] Error creating team:', e);
+      // (error logging removed for production)'[DEBUG] Error creating team:', e);
       Alert.alert("Error", "Failed to create team.");
     }
   };
@@ -611,7 +609,7 @@ export default function Home() {
           p_vine_id: vineId,
         });
         if (error) {
-          console.error('[DEBUG] Error creating singles challenge:', error);
+          // (error logging removed for production)'[DEBUG] Error creating singles challenge:', error);
           Alert.alert("Error", error.message);
         } else {
           Alert.alert("Success", "Challenge sent!");
@@ -628,29 +626,19 @@ export default function Home() {
           p_vine_id: vineId,
         });
         if (error) {
-          console.error('[DEBUG] Error creating doubles challenge:', error);
+          // (error logging removed for production)'[DEBUG] Error creating doubles challenge:', error);
           Alert.alert("Error", error.message);
         } else {
           Alert.alert("Success", "Team challenge sent!");
         }
       }
     } catch (e) {
-      console.error('[DEBUG] Unexpected error creating challenge:', e);
+      // (error logging removed for production)'[DEBUG] Unexpected error creating challenge:', e);
       Alert.alert("Error", "Failed to send challenge.");
     }
   };
 
-  console.log(
-    '[DEBUG] Render: loading =', loading,
-    'userProfile =', userProfile,
-    'singlesStandings =', singlesStandings,
-    'doublesStandings =', doublesStandings,
-    'ladders =', ladders,
-    'selectedLadder =', selectedLadder,
-    'vineId =', vineId,
-    'segment =', segment
-  );
-
+  
   if (authLoading) {
     return (
       <BackgroundWrapper>
@@ -667,7 +655,7 @@ export default function Home() {
   }
 
   if (loading) {
-    console.log('[DEBUG] Rendering loading spinner...');
+    
     return (
       <BackgroundWrapper>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -736,12 +724,7 @@ export default function Home() {
   const noStandings =
     (segment === "Singles" && singlesStandings.length === 0) ||
     (segment === "Doubles" && doublesStandings.length === 0);
-  console.log(
-    '[DEBUG] noStandings:', noStandings,
-    'segment:', segment,
-    'singlesStandings.length:', singlesStandings.length,
-    'doublesStandings.length:', doublesStandings.length
-  );
+  
 
   return (
     <BackgroundWrapper>

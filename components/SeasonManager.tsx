@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, FlatList, Button, Modal, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { supabase } from "../supabase";
+import AddSeasonModal from "./AddSeasonModal";
+import EditSeasonModal from "./EditSeasonModal";
 
 interface Ladder {
   ladder_id: string;
   name: string;
   type: string;
   description?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface Season {
@@ -23,6 +27,8 @@ interface Season {
 }
 
 export default function SeasonManager() {
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [seasonToEdit, setSeasonToEdit] = useState<Season | null>(null);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [ladders, setLadders] = useState<Ladder[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -69,45 +75,34 @@ export default function SeasonManager() {
       <FlatList
         data={seasons}
         keyExtractor={item => item.season_id}
-        renderItem={({ item }) => (
-          <View style={styles.seasonCard}>
-            <Text style={styles.seasonName}>{item.name} ({item.ladders?.name || "N/A"})</Text>
-            <Text>{item.start_date} - {item.end_date}</Text>
-            <Text>{item.description}</Text>
-            <Text>Status: {item.is_active ? "Active" : "Inactive"}</Text>
-            {/* Add Edit/Delete/Set Active buttons as needed */}
-          </View>
-        )}
+        renderItem={({ item }) => {
+          // Defensive: force is_active to boolean
+          const isActive = typeof item.is_active === 'boolean' ? item.is_active : item.is_active === true || item.is_active === 'true';
+          return (
+            <View style={styles.seasonCard}>
+              <Text style={styles.seasonName}>{item.name} ({item.ladders?.name || "N/A"})</Text>
+              <Text>{item.start_date} - {item.end_date}</Text>
+              <Text>{item.description}</Text>
+              <Text>Status: {isActive ? "Active" : "Inactive"}</Text>
+              <Button title="Edit" onPress={() => { setSeasonToEdit(item); setEditModalVisible(true); }} />
+            </View>
+          );
+        }}
         ListEmptyComponent={<Text>No seasons found.</Text>}
       />
       <Button title="Add Season" onPress={() => setModalVisible(true)} />
-      <Modal visible={modalVisible} animationType="slide">
-        <View style={styles.modalContent}>
-          <TextInput placeholder="Season Name" value={form.name} onChangeText={v => setForm(f => ({ ...f, name: v }))} style={styles.input} />
-          <TextInput placeholder="Start Date (YYYY-MM-DD)" value={form.start_date} onChangeText={v => setForm(f => ({ ...f, start_date: v }))} style={styles.input} />
-          <TextInput placeholder="End Date (YYYY-MM-DD)" value={form.end_date} onChangeText={v => setForm(f => ({ ...f, end_date: v }))} style={styles.input} />
-          <TextInput placeholder="Description" value={form.description} onChangeText={v => setForm(f => ({ ...f, description: v }))} style={styles.input} />
-          <Text style={styles.label}>Ladder</Text>
-          <FlatList
-            data={ladders}
-            keyExtractor={item => item.ladder_id}
-            horizontal
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[
-                  styles.ladderButton,
-                  form.ladder_id === item.ladder_id && styles.ladderButtonSelected,
-                ]}
-                onPress={() => setForm(f => ({ ...f, ladder_id: item.ladder_id }))}
-              >
-                <Text>{item.name}</Text>
-              </TouchableOpacity>
-            )}
-          />
-          <Button title="Save" onPress={handleSave} />
-          <Button title="Cancel" onPress={() => setModalVisible(false)} color="#888" />
-        </View>
-      </Modal>
+      <EditSeasonModal
+        visible={editModalVisible}
+        onClose={() => setEditModalVisible(false)}
+        onUpdated={fetchSeasons}
+        season={seasonToEdit || { season_id: '', name: '', description: '' }}
+      />
+      <AddSeasonModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        onAdded={fetchSeasons}
+        ladders={ladders}
+      />
     </View>
   );
 }

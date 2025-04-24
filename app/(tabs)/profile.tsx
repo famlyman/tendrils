@@ -107,11 +107,11 @@ export default function Profile() {
             const roleIds = userRoleData.map(item => item.role);
             const { data: roleData, error: roleError } = await supabase
               .from("roles")
-              .select("role_name")
-              .in("role_id", roleIds);
+              .select("name")
+              .in("id", roleIds);
             if (roleError) throw roleError;
 
-            roleNames = roleData.map(item => item.role_name);
+            roleNames = roleData.map(item => item.name);
             setRoles(roleNames);
           } else {
             setRoles([]);
@@ -325,6 +325,12 @@ export default function Profile() {
         <Animatable.View animation="fadeIn" duration={1000} style={styles.content}>
           <Image source={require("../../assets/images/pickleball.png")} style={styles.icon} />
           <Text style={styles.title}>Profile</Text>
+{/* DEBUG-ROLES-BOX */}
+<View style={{marginVertical: 10, padding: 8, backgroundColor: '#eee', borderRadius: 8}}>
+  <Text style={{fontSize: 12, color: '#333'}}>DEBUG - roles: {JSON.stringify(roles)}</Text>
+  <Text style={{fontSize: 12, color: '#333'}}>DEBUG - userId: {session?.user?.id || 'N/A'}</Text>
+</View>
+
           <Text style={styles.errorText}>Not logged in</Text>
           <Animatable.View ref={loginButtonRef}>
             <Button
@@ -380,6 +386,12 @@ export default function Profile() {
             </View>
           )}
           <Text style={styles.title}>Profile</Text>
+{/* DEBUG-ROLES-BOX */}
+<View style={{marginVertical: 10, padding: 8, backgroundColor: '#eee', borderRadius: 8}}>
+  <Text style={{fontSize: 12, color: '#333'}}>DEBUG - roles: {JSON.stringify(roles)}</Text>
+  <Text style={{fontSize: 12, color: '#333'}}>DEBUG - userId: {session?.user?.id || 'N/A'}</Text>
+</View>
+
           <Text style={styles.label}>Name: {name}</Text>
           {phone && <Text style={styles.label}>Phone: {phone}</Text>}
           <Text style={styles.label}>Email: {session.user.email}</Text>
@@ -477,7 +489,7 @@ export default function Profile() {
               />
             </Animatable.View>
           )}
-          {roles.includes("Coordinator") && (
+          {roles.some(role => role.toLowerCase() === "coordinator") && (
             <Animatable.View ref={coordinatorButtonRef}>
               <Button
                 title="Coordinator Dashboard"
