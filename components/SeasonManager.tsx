@@ -26,7 +26,11 @@ interface Season {
   ladders?: Ladder; // for joined data
 }
 
-export default function SeasonManager() {
+interface SeasonManagerProps {
+  laddersRefreshTrigger?: number;
+}
+
+export default function SeasonManager({ laddersRefreshTrigger }: SeasonManagerProps = {}) {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [seasonToEdit, setSeasonToEdit] = useState<Season | null>(null);
   const [seasons, setSeasons] = useState<Season[]>([]);
@@ -38,6 +42,13 @@ export default function SeasonManager() {
     fetchSeasons();
     fetchLadders();
   }, []);
+
+  // Refetch ladders when trigger changes
+  useEffect(() => {
+    if (typeof laddersRefreshTrigger !== 'undefined') {
+      fetchLadders();
+    }
+  }, [laddersRefreshTrigger]);
 
   const fetchSeasons = async () => {
     const { data } = await supabase
@@ -91,12 +102,23 @@ export default function SeasonManager() {
         ListEmptyComponent={<Text>No seasons found.</Text>}
       />
       <Button title="Add Season" onPress={() => setModalVisible(true)} />
-      <EditSeasonModal
-        visible={editModalVisible}
-        onClose={() => setEditModalVisible(false)}
-        onUpdated={fetchSeasons}
-        season={seasonToEdit || { season_id: '', name: '', description: '' }}
-      />
+      {seasonToEdit && (
+        <EditSeasonModal
+          visible={editModalVisible}
+          onClose={() => { setEditModalVisible(false); setSeasonToEdit(null); }}
+          onUpdated={fetchSeasons}
+          season={{
+            season_id: seasonToEdit.season_id,
+            name: seasonToEdit.name,
+            description: seasonToEdit.description || '',
+            start_date: seasonToEdit.start_date || '',
+            end_date: seasonToEdit.end_date || '',
+            ladder_id: seasonToEdit.ladder_id || '',
+            is_active: !!seasonToEdit.is_active,
+          }}
+          ladders={ladders}
+        />
+      )}
       <AddSeasonModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}

@@ -19,6 +19,7 @@ import AddLadderModal from "../components/AddLadderModal";
 import EditLadderModal from "../components/EditLadderModal";
 
 export default function CoordinatorDashboard() {
+  const [laddersRefreshTrigger, setLaddersRefreshTrigger] = useState(0);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -243,7 +244,7 @@ export default function CoordinatorDashboard() {
       case "seasons":
         return (
           <View style={styles.sectionCard}>
-            <SeasonManager />
+            <SeasonManager laddersRefreshTrigger={laddersRefreshTrigger} />
           </View>
         );
       case "pending_matches":
@@ -277,13 +278,19 @@ export default function CoordinatorDashboard() {
       <EditLadderModal
         visible={editLadderModalVisible}
         onClose={() => setEditLadderModalVisible(false)}
-        onUpdated={fetchLadders}
+        onUpdated={() => {
+          fetchLadders();
+          setLaddersRefreshTrigger((v) => v + 1);
+        }}
         ladder={ladderToEdit || { ladder_id: "", name: "", type: "", description: "" }}
       />
       <AddLadderModal
         visible={addLadderModalVisible}
         onClose={() => setAddLadderModalVisible(false)}
-        onAdded={fetchLadders}
+        onAdded={() => {
+          fetchLadders();
+          setLaddersRefreshTrigger((v) => v + 1);
+        }}
       />
     </View>
   );

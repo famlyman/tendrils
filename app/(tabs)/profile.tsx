@@ -83,17 +83,17 @@ export default function Profile() {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        console.log("[Profile] Fetching user data...");
+        
         const { data: { session } } = await supabase.auth.getSession();
-        console.log("[Profile] Session:", session);
+        
 
         if (session && session.user) {
           const { data: userData, error: userError } = await supabase.auth.getUser();
-          console.log('[Profile] userData:', userData, 'userError:', userError);
+          
           if (userError || !userData || !userData.user) throw userError || new Error('No user');
           const fullName = userData.user.user_metadata.full_name || "";
           const userId = userData.user.id;
-          console.log("[Profile] User ID:", userId);
+          
           setName(fullName);
 
           const { data: userRoleData, error: userRoleError } = await supabase
@@ -122,8 +122,7 @@ export default function Profile() {
             .select("name, bio, phone, rating, profile_picture") // Fetch name from profiles
             .eq("user_id", session.user.id)
             .single();
-          console.log("[Profile] profileData from profiles table:", profileData);
-          console.log("[Profile] profileError:", profileError);
+          
           if (!profileError && profileData) {
             setName(profileData.name || fullName || ""); // Prefer name from profiles
             setBio(profileData.bio || "");
@@ -144,7 +143,7 @@ export default function Profile() {
           }
         }
       } catch (err) {
-        console.log("Error fetching user data:", err);
+        
       } finally {
         setLoading(false);
       }
@@ -171,7 +170,7 @@ export default function Profile() {
         setProfilePicture(result.assets[0].uri);
       }
     } catch (error) {
-      console.log("Error picking image:", error);
+      
       Alert.alert("Error", "Failed to pick image. Please try again.");
     }
   };
@@ -211,7 +210,7 @@ export default function Profile() {
               setRoles(roles.filter(role => role !== "Player"));
               Alert.alert("Success", "Player role removed.");
             } catch (err: any) {
-              console.log("Error removing player role:", err);
+              
               Alert.alert("Error", "Failed to remove Player role.");
             }
           },
@@ -240,7 +239,7 @@ export default function Profile() {
           });
 
         if (uploadError) {
-          console.log("Image upload error:", uploadError.message);
+          
           Alert.alert("Error", "Failed to upload profile picture.");
           return;
         }
@@ -296,7 +295,7 @@ export default function Profile() {
       Alert.alert("Success", "Profile updated!");
       setShowEditCard(false);
     } catch (err: any) {
-      console.log("Error saving profile:", err);
+      
       Alert.alert("Error", "Failed to save profile.");
     }
   };
@@ -325,11 +324,7 @@ export default function Profile() {
         <Animatable.View animation="fadeIn" duration={1000} style={styles.content}>
           <Image source={require("../../assets/images/pickleball.png")} style={styles.icon} />
           <Text style={styles.title}>Profile</Text>
-{/* DEBUG-ROLES-BOX */}
-<View style={{marginVertical: 10, padding: 8, backgroundColor: '#eee', borderRadius: 8}}>
-  <Text style={{fontSize: 12, color: '#333'}}>DEBUG - roles: {JSON.stringify(roles)}</Text>
-  <Text style={{fontSize: 12, color: '#333'}}>DEBUG - userId: {session?.user?.id || 'N/A'}</Text>
-</View>
+
 
           <Text style={styles.errorText}>Not logged in</Text>
           <Animatable.View ref={loginButtonRef}>
@@ -356,7 +351,7 @@ export default function Profile() {
   }
 
   // Log state before render
-  console.log("[Profile] Render state:", { name, bio, phone, rating, profilePicture });
+  
 
   return (
     <LinearGradient colors={["#A8E6CF", "#4A704A"]} style={styles.container}>
@@ -386,11 +381,7 @@ export default function Profile() {
             </View>
           )}
           <Text style={styles.title}>Profile</Text>
-{/* DEBUG-ROLES-BOX */}
-<View style={{marginVertical: 10, padding: 8, backgroundColor: '#eee', borderRadius: 8}}>
-  <Text style={{fontSize: 12, color: '#333'}}>DEBUG - roles: {JSON.stringify(roles)}</Text>
-  <Text style={{fontSize: 12, color: '#333'}}>DEBUG - userId: {session?.user?.id || 'N/A'}</Text>
-</View>
+
 
           <Text style={styles.label}>Name: {name}</Text>
           {phone && <Text style={styles.label}>Phone: {phone}</Text>}
