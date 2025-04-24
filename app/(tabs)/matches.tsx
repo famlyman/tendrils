@@ -55,20 +55,27 @@ export default function Matches() {
   useEffect(() => {
     const fetchChallenges = async () => {
       try {
+        console.log("[DEBUG] Fetching session...");
         const { data: { session } } = await supabase.auth.getSession();
+        console.log("[DEBUG] Session result:", session);
         if (!session) {
+          console.log("[DEBUG] No session found, redirecting to /login");
           router.replace("/login");
           return;
         }
         setCurrentUser(session.user);
+        console.log("[DEBUG] Set currentUser:", session.user);
 
-        const { data: profile } = await supabase
+        console.log("[DEBUG] Fetching profile for user id:", session.user.id);
+        const { data: profile, error: profileError } = await supabase
           .from("profiles")
           .select("vine_id")
           .eq("user_id", session.user.id)
           .single();
+        console.log("[DEBUG] Profile result:", profile, profileError);
 
         if (!profile?.vine_id) {
+          console.log("[DEBUG] No vine_id in profile. Setting challenges to empty and loading to false.");
           setChallenges([]);
           setUpcomingChallenges([]);
           setLoading(false);
@@ -76,6 +83,7 @@ export default function Matches() {
         }
 
         // Fetch recent (completed) challenges
+        console.log("[DEBUG] Fetching recent challenges for vine_id:", profile.vine_id);
         const { data: recentData, error: recentError } = await supabase
           .from("flowers")
           .select(`
@@ -88,9 +96,10 @@ export default function Matches() {
           .eq("vine_id", profile.vine_id)
           .eq("status", "completed")
           .order("date", { ascending: false });
+        console.log("[DEBUG] Recent challenges fetch result:", recentData, recentError);
 
         if (recentError) {
-          console.log("Error fetching recent challenges:", recentError.message);
+          console.log("[DEBUG] Error fetching recent challenges:", recentError.message);
           Alert.alert("Error", "Failed to load recent challenges.");
         } else {
           const recentChallenges = await Promise.all(
@@ -129,10 +138,12 @@ export default function Matches() {
               };
             })
           );
+          console.log("[DEBUG] Processed recent challenges:", recentChallenges);
           setChallenges(recentChallenges);
         }
 
         // Fetch upcoming (pending/accepted) challenges
+        console.log("[DEBUG] Fetching upcoming challenges for vine_id:", profile.vine_id);
         const { data: upcomingData, error: upcomingError } = await supabase
           .from("flowers")
           .select(`
@@ -145,9 +156,10 @@ export default function Matches() {
           .eq("vine_id", profile.vine_id)
           .in("status", ["pending", "accepted"])
           .order("date", { ascending: true });
+        console.log("[DEBUG] Upcoming challenges fetch result:", upcomingData, upcomingError);
 
         if (upcomingError) {
-          console.log("Error fetching upcoming challenges:", upcomingError.message);
+          console.log("[DEBUG] Error fetching upcoming challenges:", upcomingError.message);
           Alert.alert("Error", "Failed to load upcoming challenges.");
         } else {
           const upcomingChallenges = await Promise.all(
@@ -186,12 +198,14 @@ export default function Matches() {
               };
             })
           );
+          console.log("[DEBUG] Processed upcoming challenges:", upcomingChallenges);
           setUpcomingChallenges(upcomingChallenges);
         }
       } catch (e) {
-        console.log("Unexpected error:", e);
+        console.log("[DEBUG] Unexpected error:", e);
         Alert.alert("Error", "An unexpected error occurred.");
       } finally {
+        console.log("[DEBUG] Setting loading to false");
         setLoading(false);
       }
     };

@@ -101,7 +101,7 @@ export default function CoordinatorDashboard() {
 
         setTeams(teamData);
       } catch (err) {
-        console.log("Error fetching data:", err);
+        
       } finally {
         setLoading(false);
       }

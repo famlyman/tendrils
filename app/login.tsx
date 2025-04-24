@@ -9,37 +9,37 @@ import BackgroundWrapper from "../components/BackgroundWrapper";
 import { COLORS, TYPOGRAPHY } from "../constants/theme";
 import { LinearGradient } from "expo-linear-gradient";
 
-console.log("Login component rendered");
+
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
-    console.log("Attempting login with:", { email, password });
+    
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       if (error) {
-        console.log("Login error:", error.message, error.code);
+        
         Alert.alert("Error", error.message);
         return;
       }
 
-      console.log("Login success:", data);
+     
       if (!data?.user?.id) {
-        console.log("No user ID returned from supabase signInWithPassword", data);
+        
         Alert.alert("Error", "No user ID returned after login");
         return;
       }
       const userId = data.user.id;
-      console.log("Checking profile for user id:", userId);
+      
 
       // First clear any stale state
       await AsyncStorage.multiRemove(["hasCompletedOnboarding", "isSignedUp"]);
-      console.log("Cleared hasCompletedOnboarding and isSignedUp in AsyncStorage");
+     
 
       // Check if user has a profile with a vine_id in the database
       const { data: profile, error: profileError } = await supabase
@@ -48,51 +48,44 @@ export default function Login() {
         .eq('user_id', userId)
         .single();
 
-      console.log("Profile fetch result:", profile);
-      console.log("Profile fetch error:", profileError);
+      
 
       if (profileError) {
-        console.log("Supabase profile fetch error:", profileError.message, profileError.code);
+        
       }
       if (profile) {
-        console.log(
-          `Profile fields for user: user_id=${profile.user_id}, vine_id=${profile.vine_id}, name=${profile.name}`
-        );
+        
       }
 
       // Log AsyncStorage before setting
       const beforeHasCompleted = await AsyncStorage.getItem("hasCompletedOnboarding");
       const beforeIsSignedUp = await AsyncStorage.getItem("isSignedUp");
-      console.log("Before setting, AsyncStorage hasCompletedOnboarding:", beforeHasCompleted);
-      console.log("Before setting, AsyncStorage isSignedUp:", beforeIsSignedUp);
+      
 
       if (profile?.vine_id && profile?.name) {
         // User has a complete profile with vine_id and name
-        console.log("User has completed onboarding. Setting AsyncStorage and redirecting to home...");
+        
         await AsyncStorage.setItem("hasCompletedOnboarding", "true");
         await AsyncStorage.setItem("isSignedUp", "true");
         // Log AsyncStorage after setting
         const afterHasCompleted = await AsyncStorage.getItem("hasCompletedOnboarding");
         const afterIsSignedUp = await AsyncStorage.getItem("isSignedUp");
-        console.log("After setting, AsyncStorage hasCompletedOnboarding:", afterHasCompleted);
-        console.log("After setting, AsyncStorage isSignedUp:", afterIsSignedUp);
-        console.log("Calling router.replace('/(tabs)/home')");
+        
         router.replace("/(tabs)/home");
       } else {
         // User needs to complete onboarding
         if (!profile) {
-          console.log("No profile found - redirecting to join-vine");
+          
         } else if (!profile.vine_id) {
-          console.log("Profile exists but no vine_id - redirecting to join-vine");
+          
         } else if (!profile.name) {
-          console.log("Profile exists but no name - redirecting to join-vine");
+          
         } else {
-          console.log("Unknown profile state - redirecting to join-vine");
+          
         }
         router.replace("/onboarding/join-vine");
       }
     } catch (e) {
-      console.log("Login exception:", e);
       Alert.alert("Error", "Failed to log in. Try again.");
     }
   };
@@ -128,7 +121,6 @@ export default function Login() {
             <Button
               title="Log In"
               onPress={() => {
-                console.log("Login button pressed");
                 handleLogin();
               }}
               buttonStyle={styles.button}
@@ -152,7 +144,6 @@ export default function Login() {
       </BackgroundWrapper>
     );
   } catch (renderErr) {
-    console.log("Error rendering Login component:", renderErr);
     return <Text>Error rendering Login screen: {String(renderErr)}</Text>;
   }
 }

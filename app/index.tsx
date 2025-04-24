@@ -42,9 +42,7 @@ useEffect(() => {
     }
     const hasCompletedOnboarding = await AsyncStorage.getItem("hasCompletedOnboarding");
     const isSignedUp = await AsyncStorage.getItem("isSignedUp");
-    console.log("Landing - Session:", session);
-    console.log("Landing - hasCompletedOnboarding:", hasCompletedOnboarding);
-    console.log("Landing - isSignedUp:", isSignedUp);
+    
 
     if (session && hasCompletedOnboarding === "true") {
       router.replace("/(tabs)/home");
@@ -52,7 +50,7 @@ useEffect(() => {
       router.replace("/onboarding/join-vine");
     } else {
       await AsyncStorage.clear();
-      console.log("AsyncStorage cleared due to no session or incomplete onboarding");
+      
     }
     setLoading(false);
   };

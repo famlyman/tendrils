@@ -19,7 +19,6 @@ export default function ProfileSetup() {
     const checkProfile = async () => {
       try {
         if (!vine_id) {
-          console.log("No vine_id provided in navigation params");
           Alert.alert(
             "Error",
             "Vine ID is missing. Please join or create a vine first.",
@@ -40,7 +39,6 @@ export default function ProfileSetup() {
           .eq("user_id", session.user.id);
 
         if (error) {
-          console.log("Error checking profile:", error.message);
           Alert.alert("Error", "Failed to check profile. Please try again.");
           return;
         }
@@ -61,7 +59,7 @@ export default function ProfileSetup() {
           .single();
 
         if (vineError || !vine) {
-          console.log("Invalid vine ID:", vine_id);
+          
           Alert.alert(
             "Error",
             "The selected vine does not exist. Please try again.",
@@ -99,7 +97,6 @@ export default function ProfileSetup() {
         setProfilePicture(result.assets[0].uri);
       }
     } catch (error) {
-      console.log("Error picking image:", error);
       Alert.alert("Error", "Failed to pick image. Please try again.");
     }
   };
@@ -122,7 +119,7 @@ export default function ProfileSetup() {
     }
 
     setLoading(true);
-    console.log("Starting profile setup...");
+    
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -145,7 +142,7 @@ export default function ProfileSetup() {
           });
 
         if (uploadError) {
-          console.log("Image upload error:", uploadError.message);
+          
           Alert.alert("Error", "Failed to upload profile picture.");
           return;
         }
@@ -161,7 +158,7 @@ export default function ProfileSetup() {
 
 
 
-      console.log("Input - Name:", name, "Rating:", rating, "Bio:", bio, "Phone:", phone, "Vine ID:", vine_id);
+      
 
       // Upsert profile with vine_id
       const { data: profile, error: profileError } = await supabase
@@ -178,20 +175,17 @@ export default function ProfileSetup() {
   .select()
   .single();
 
-if (profileError) {
-        console.log("Profile upsert error:", profileError.message, profileError.code);
-        Alert.alert("Error", profileError.message);
-        return;
-      }
-      console.log("Profile saved with vine_id:", profile.vine_id);
-      // Redirect to home after profile setup
-      router.replace("/onboarding/get-started");
+        if (profileError) {
+            Alert.alert("Error", profileError.message);
+            return;
+        }
+
+        // Redirect to home after profile setup
+        router.replace("/onboarding/get-started");
     } catch (error) {
-      console.log("Profile setup error:", error);
       Alert.alert("Error", "Failed to save profile. Try again.");
     } finally {
       setLoading(false);
-      console.log("Profile setup completed (success or failure)");
     }
   };
 

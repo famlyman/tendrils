@@ -30,7 +30,6 @@ export default function CreateVine() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
-          console.log("No session found - redirecting to login");
           router.replace("/login");
           return;
         }
@@ -41,62 +40,52 @@ export default function CreateVine() {
           .eq("user_id", session.user.id);
 
         if (profileError) {
-          console.log("Error checking profile in create-vine:", profileError.message);
           return;
         }
 
         if (profiles && profiles.length > 0) {
           const profile = profiles[0];
           if (profile.vine_id) {
-            console.log("User already has a vine_id:", profile.vine_id, "Redirecting to home...");
             router.replace("/(tabs)/home");
             return;
           }
         }
       } catch (e) {
-        console.log("Error in create-vine useEffect:", e);
+        console.error("Error checking profile:", e);
       }
     };
     checkProfileAndRedirect();
   }, []);
 
   const handleCreateVine = async () => {
-    console.log("Starting vine creation...");
-    console.log("Input - Vine Name:", vineName, "Is Private:", isPrivate);
-
     if (!vineName) {
-        console.log("Validation failed: Vine name is missing");
+        
         alert("Please enter a vine name.");
         return;
     }
 
     setLoading(true);
     try {
-        console.log("Fetching session...");
+        
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) {
-            console.log("Session error:", sessionError.message);
             alert(`Error fetching session: ${sessionError.message}`);
             return;
         }
         if (!session) {
-            console.log("No session found - redirecting to signup");
             alert("You must be logged in to create a vine.");
             router.push("/signup");
             return;
         }
-        console.log("Session retrieved:", session.user.id);
 
         let joinCode = null;
         if (isPrivate) {
-            console.log("Generating join code for private vine...");
             let attempts = 0;
             const maxAttempts = 10;
             let isUnique = false;
 
             while (!isUnique && attempts < maxAttempts) {
                 joinCode = generateRandomCode();
-                console.log(`Attempt ${attempts + 1}: Generated join code: ${joinCode}`);
 
                 const { data, error } = await supabase
                     .from("vines")
@@ -105,8 +94,8 @@ export default function CreateVine() {
                     .maybeSingle();
 
                 if (error) {
-                    console.log("Error checking join code:", error.message);
-                    throw new Error(`Error checking join code: ${error.message}`);
+                    alert(`Error checking join code: ${error.message}`);
+                    return;
                 }
 
                 isUnique = !data;
@@ -114,13 +103,11 @@ export default function CreateVine() {
             }
 
             if (!isUnique) {
-                console.log("Failed to generate a unique join code after", maxAttempts, "attempts");
-                throw new Error("Unable to generate a unique join code. Please try again.");
+                alert("Failed to generate a unique join code. Please try again.");
+                return;
             }
-            console.log("Unique join code generated:", joinCode);
         }
 
-        console.log("Inserting new vine...");
         const { data: vineData, error: vineError } = await supabase
             .from("vines")
             .insert({
@@ -133,17 +120,15 @@ export default function CreateVine() {
             .single();
 
         if (vineError) {
-            console.log("Vine insert error:", vineError.message, vineError.code);
-            throw new Error(`Error creating vine: ${vineError.message}`);
+            alert(`Error creating vine: ${vineError.message}`);
+            return;
         }
-        console.log("Vine created:", vineData);
 
         // Insert user_roles row for coordinator
-        console.log("Inserting user_roles row for coordinator...");
         const { data: roleData, error: roleError } = await supabase
     .from("user_roles")
     .insert({
-        id: uuid.v4(), // Use react-native-uuid
+        id: generateRandomUUID(), // Use react-native-uuid
         user_id: session.user.id,
         vine_id: vineData.vine_id,
         role: (await supabase.from("roles").select("id").eq("name", "coordinator").single()).data?.id,
@@ -152,19 +137,16 @@ export default function CreateVine() {
     .single();
 
         if (roleError) {
-            console.log("User roles insert error:", roleError.message, roleError.code);
-            throw new Error(`Error assigning coordinator role: ${roleError.message}`);
+            alert(`Error assigning coordinator role: ${roleError.message}`);
+            return;
         }
-        console.log("Coordinator role assigned:", roleData);
 
-        console.log("Navigating to profile setup with vineId:", vineData.vine_id);
         router.push({ pathname: "/onboarding/profile", params: { vine_id: vineData.vine_id } });
     } catch (e) {
         console.error("Unexpected error during vine creation:", e);
         alert(`An error occurred: ${(e as Error).message || "Unknown error"}`);
     } finally {
         setLoading(false);
-        console.log("Vine creation completed (success or failure)");
     }
 };
 
