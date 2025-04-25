@@ -43,15 +43,6 @@ export default function Matches() {
   const [score, setScore] = useState("");
   const router = useRouter();
 
-  // Show loading spinner until data is ready
-  if (loading || !currentUser) {
-    return (
-      <BackgroundWrapper>
-        <LoadingScreen />
-      </BackgroundWrapper>
-    );
-  }
-
   useEffect(() => {
     const fetchChallenges = async () => {
       try {
@@ -211,6 +202,15 @@ export default function Matches() {
     };
     fetchChallenges();
   }, []);
+
+  // Show loading spinner until data is ready - MOVED HERE after useEffect
+  if (loading || !currentUser) {
+    return (
+      <BackgroundWrapper>
+        <LoadingScreen />
+      </BackgroundWrapper>
+    );
+  }
 
   const handleAcceptChallenge = async (flower_id: string) => {
     try {

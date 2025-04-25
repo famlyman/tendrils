@@ -152,13 +152,19 @@ export default function CoordinatorDashboard() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No user");
-      await supabase.from("messages").insert({
+      const { error } = await supabase.from("messages").insert({
         sender_id: user.id,
         target_type: targetType,
         target_id: targetId || null,
         ladder_id: ladderId || null,
         content,
+        topic: "announcement", // required
+        extension: "text",     // required
       });
+      if (error) {
+        Alert.alert("Error", error.message || "Failed to send announcement.");
+        return;
+      }
       Alert.alert("Success", "Announcement sent!");
       setAnnouncementModalVisible(false);
     } catch (e) {

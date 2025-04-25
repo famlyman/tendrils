@@ -119,7 +119,7 @@ export default function Profile() {
 
           const { data: profileData, error: profileError } = await supabase
             .from("profiles")
-            .select("name, bio, phone, rating, profile_picture") // Fetch name from profiles
+            .select("name, bio, phone, rating, profile_picture, avatar_url") // Fetch avatar_url from profiles
             .eq("user_id", session.user.id)
             .single();
           
@@ -128,7 +128,7 @@ export default function Profile() {
             setBio(profileData.bio || "");
             setPhone(profileData.phone || "");
             setRating(profileData.rating || null);
-            setProfilePicture(profileData.profile_picture || null);
+            setProfilePicture(profileData.avatar_url || profileData.profile_picture || null); // Prefer avatar_url
           } else {
             setName(fullName || "");
           }
@@ -224,7 +224,7 @@ export default function Profile() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No user");
 
-      let profilePictureUrl: string | null = null;
+      let avatarUrl: string | null = null;
       if (profilePicture && profilePicture.startsWith("file://")) { // Check if it's a new image (local URI)
         const fileExt = profilePicture.split(".").pop()?.toLowerCase() || "jpg";
         const fileName = `${user.id}.${fileExt}`;
@@ -248,10 +248,10 @@ export default function Profile() {
           .from("profile-pictures")
           .getPublicUrl(fileName);
 
-        profilePictureUrl = publicUrlData.publicUrl;
-        setProfilePicture(profilePictureUrl); // Update state with the new URL
+        avatarUrl = publicUrlData.publicUrl;
+        setProfilePicture(avatarUrl); // Update state with the new URL
       } else {
-        profilePictureUrl = profilePicture; // Keep the existing URL if no new image is selected
+        avatarUrl = profilePicture; // Keep the existing URL if no new image is selected
       }
 
       if (name !== user.user_metadata.full_name) {
@@ -285,7 +285,8 @@ export default function Profile() {
             bio: bio || null,
             phone: phone.replace(/\D/g, "") || null, // Renamed from contact_info to phone
             rating: ratingNum, // Save rating
-            profile_picture: profilePictureUrl, // Save profile picture URL
+            profile_picture: avatarUrl, // (optional: keep for backward compatibility)
+            avatar_url: avatarUrl,      // Save avatar_url
             updated_at: new Date().toISOString(),
           },
           { onConflict: "user_id" }

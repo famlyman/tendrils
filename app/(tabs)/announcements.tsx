@@ -22,14 +22,6 @@ const AnnouncementsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [userTeams, setUserTeams] = useState<string[]>([]);
 
-  // Show loading until userId is available
-  if (!userId || loading) {
-    return (
-      <BackgroundWrapper>
-        <LoadingScreen />
-      </BackgroundWrapper>
-    );
-  }
 
   useEffect(() => {
     const fetchUserTeams = async () => {
@@ -70,6 +62,14 @@ const AnnouncementsScreen: React.FC = () => {
     };
     fetchAnnouncements();
   }, [userId, userTeams]);
+
+  if (!userId || loading) {
+    return (
+      <BackgroundWrapper>
+        <LoadingScreen />
+      </BackgroundWrapper>
+    );
+  }
 
   return (
     <BackgroundWrapper>
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 6,
     fontFamily: TYPOGRAPHY.fonts.body,
-    color: COLORS.text.primary,
+    color: "#000", // High contrast for readability
   },
   meta: {
     color: COLORS.text.muted,
