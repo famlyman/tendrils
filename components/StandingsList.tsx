@@ -13,6 +13,7 @@ interface PlayerProfile {
 }
 
 interface TeamProfile {
+  [x: string]: any;
   members: any;
   team_id: string;
   team_name: string;

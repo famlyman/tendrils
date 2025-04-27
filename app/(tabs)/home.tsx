@@ -26,7 +26,7 @@ import StandingsList from "../../components/StandingsList";
 
 const SEGMENTS = ["Singles", "Doubles"];
 
-interface PlayerProfile {
+interface SinglesStanding {
   user_id: string;
   player_name: string;
   rating: number;
@@ -36,14 +36,16 @@ interface PlayerProfile {
   ladder_id: string;
 }
 
-interface TeamProfile {
+interface DoublesStanding {
   team_id: string;
   name: string;
   members: string[];
   wins: number;
   losses: number;
   position: number;
+  ladder_id: string;
 }
+
 
 interface UserRoleResponse {
   role: { name: string } | null;
@@ -160,11 +162,11 @@ const styles = StyleSheet.create({
 });
 
 export default function Home() {
-  const [challengeTarget, setChallengeTarget] = useState<ChallengeTarget>(null);
+  const [challengeTarget, setChallengeTarget] = useState<ChallengeTarget | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [segment, setSegment] = useState("Singles");
-  const [singlesStandings, setSinglesStandings] = useState<PlayerProfile[]>([]);
-  const [doublesStandings, setDoublesStandings] = useState<TeamProfile[]>([]);
+  const [singlesStandings, setSinglesStandings] = useState<SinglesStanding[]>([]);
+  const [doublesStandings, setDoublesStandings] = useState<DoublesStanding[]>([]);
   const [vineId, setVineId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [userTeams, setUserTeams] = useState<string[]>([]);
@@ -547,6 +549,7 @@ export default function Home() {
           wins: 0,
           losses: 0,
           position: nodeData.position,
+          ladder_id: selectedLadder?.ladder_id ?? '',
         },
       ]);
       setUserTeams([...userTeams, teamData.team_id]);
@@ -558,43 +561,66 @@ export default function Home() {
   };
 
   const handleChallenge = async () => {
-    if (!challengeTarget || !vineId || !userId) return;
-    try {
-      if ("user_id" in challengeTarget) {
-        const { data, error } = await supabase.rpc("create_challenge", {
-          p_challenger_id: userId,
-          p_opponent_id: challengeTarget.user_id,
-          p_vine_id: vineId,
-        });
-        if (error) {
-          // (error logging removed for production)'[DEBUG] Error creating singles challenge:', error);
-          Alert.alert("Error", error.message);
-        } else {
-          Alert.alert("Success", "Challenge sent!");
-        }
-      } else {
-        if (userTeams.length === 0) {
-          Alert.alert("Error", "You must be part of a team to challenge in doubles.");
-          return;
-        }
-        const { data, error } = await supabase.rpc("create_challenge", {
-          p_team_iettivi: true,
-          p_team_1_id: userTeams[0],
-          p_team_2_id: challengeTarget.team_id,
-          p_vine_id: vineId,
-        });
-        if (error) {
-          // (error logging removed for production)'[DEBUG] Error creating doubles challenge:', error);
-          Alert.alert("Error", error.message);
-        } else {
-          Alert.alert("Success", "Team challenge sent!");
-        }
-      }
-    } catch (e) {
-      // (error logging removed for production)'[DEBUG] Unexpected error creating challenge:', e);
-      Alert.alert("Error", "Failed to send challenge.");
+  console.log('[DEBUG] handleChallenge called');
+  console.log('[DEBUG] challengeTarget:', challengeTarget);
+  console.log('[DEBUG] vineId:', vineId);
+  console.log('[DEBUG] userId:', userId);
+  try {
+    if (!challengeTarget || !vineId || !userId) {
+      console.log('[DEBUG] Missing challengeTarget, vineId, or userId');
+      return;
     }
-  };
+    if ("user_id" in challengeTarget) {
+      console.log('[DEBUG] Creating singles challenge', {
+        p_challenger_id: userId,
+        p_opponent_id: challengeTarget.user_id,
+        p_vine_id: vineId,
+      });
+      const { data, error } = await supabase.rpc("create_singles_challenge", {
+        p_challenger_id: userId,
+        p_opponent_id: challengeTarget.user_id,
+        p_vine_id: vineId,
+      });
+      console.log('[DEBUG] Singles challenge result:', { data, error });
+      if (error) {
+        console.log('[DEBUG] Error creating singles challenge:', error);
+        Alert.alert("Error", error.message);
+      } else {
+        Alert.alert("Success", "Challenge sent!");
+      }
+    } else {
+      console.log('[DEBUG] Creating doubles challenge');
+      if (!userTeams || userTeams.length === 0) {
+        console.log('[DEBUG] No userTeams found for doubles challenge');
+        Alert.alert("Error", "You must be part of a team to challenge in doubles.");
+        return;
+      }
+      console.log('[DEBUG] Doubles challenge params:', {
+        p_team_iettivi: true,
+        p_team_1_id: userTeams[0],
+        p_team_2_id: challengeTarget.team_id,
+        p_vine_id: vineId,
+      });
+      const { data, error } = await supabase.rpc("create_doubles_challenge", {
+        p_vine_id: vineId,
+        p_challenger_id: userId,
+        p_opponent_id: challengeTarget.user_id,
+        p_team_1_id: userTeams[0],
+        p_team_2_id: challengeTarget.team_id,
+      });
+      console.log('[DEBUG] Doubles challenge result:', { data, error });
+      if (error) {
+        console.log('[DEBUG] Error creating doubles challenge:', error);
+        Alert.alert("Error", error.message);
+      } else {
+        Alert.alert("Success", "Team challenge sent!");
+      }
+    }
+  } catch (e) {
+    console.log('[DEBUG] Unexpected error creating challenge:', e);
+    Alert.alert("Error", "Failed to send challenge.");
+  }
+};
 
   
   if (authLoading) {
