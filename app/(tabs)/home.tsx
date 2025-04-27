@@ -28,11 +28,12 @@ const SEGMENTS = ["Singles", "Doubles"];
 
 interface PlayerProfile {
   user_id: string;
-  name: string;
+  player_name: string;
   rating: number;
   wins: number;
   losses: number;
   position: number;
+  ladder_id: string;
 }
 
 interface TeamProfile {
@@ -54,7 +55,8 @@ interface Ladder {
   type: string;
 }
 
-type ChallengeTarget = PlayerProfile | TeamProfile | null;
+import type { StandingsItem } from "../../components/StandingsList";
+type ChallengeTarget = StandingsItem | null;
 
 const styles = StyleSheet.create({
   challengeBtn: {
@@ -329,75 +331,32 @@ export default function Home() {
       try {
         
         const { data: singlesData, error: singlesError } = await supabase
-          .from("user_ladder_nodes")
-          .select(`
-            user_id,
-            position,
-            profiles (name, rating),
-            fruit_records (wins, losses)
-          `)
+          .from("singles_standings")
+          .select("*")
           .eq("ladder_id", selectedLadder.ladder_id)
-          .is("team_id", null)
           .order("position", { ascending: true });
+
         if (singlesError) {
-          
           setSinglesStandings([]);
         } else if (!singlesData || singlesData.length === 0) {
-          
           setSinglesStandings([]);
         } else {
-          const singles = singlesData.map((item: any) => ({
-            user_id: item.user_id,
-            name: item.profiles?.name || 'Unknown',
-            rating: item.profiles?.rating || 0,
-            wins: item.fruit_records?.wins || 0,
-            losses: item.fruit_records?.losses || 0,
-            position: item.position,
-          }));
-          setSinglesStandings(singles);
-          
+          setSinglesStandings(singlesData);
         }
 
-        
         const { data: doublesData, error: doublesError } = await supabase
-          .from("user_ladder_nodes")
-          .select(`
-            team_id,
-            position,
-            teams (name),
-            fruit_records (wins, losses)
-          `)
+          .from("doubles_standings")
+          .select("*")
           .eq("ladder_id", selectedLadder.ladder_id)
-          .is("user_id", null)
           .order("position", { ascending: true });
         if (doublesError) {
-          
           setDoublesStandings([]);
         } else if (!doublesData || doublesData.length === 0) {
-          
           setDoublesStandings([]);
         } else {
-          const teamsData = await Promise.all(
-            doublesData.map(async (item: any) => {
-              const { data: membersData } = await supabase
-                .from("team_members")
-                .select("user_id, profiles!user_id (name)")
-                .eq("team_id", item.team_id);
-              const members = membersData?.map((m: any) => m.profiles?.name || "") || [];
-              return {
-                team_id: item.team_id,
-                name: item.teams?.name || 'Unknown',
-                members,
-                wins: item.fruit_records?.wins || 0,
-                losses: item.fruit_records?.losses || 0,
-                position: item.position,
-              };
-            })
-          );
-          setDoublesStandings(teamsData);
-          
+          setDoublesStandings(doublesData);
         }
-
+        
         const { data: userTeamsData } = await supabase
           .from("team_members")
           .select("team_id")
@@ -405,7 +364,6 @@ export default function Home() {
         setUserTeams(userTeamsData?.map((t: any) => t.team_id) || []);
         
       } catch (e) {
-        // (error logging removed for production)'[DEBUG] Unexpected error in fetchStandings:', e);
         setSinglesStandings([]);
         setDoublesStandings([]);
         Alert.alert("Error", "Failed to fetch standings.");
@@ -498,7 +456,7 @@ export default function Home() {
     if (!selectedLadder || selectedLadder.ladder_id === 'none') return;
     Alert.alert(
       "Remove from Ladder",
-      `Are you sure you want to remove ${item.name} from this ladder?`,
+      `Are you sure you want to remove ${item.player_name} from this ladder?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -650,8 +608,7 @@ export default function Home() {
   }
 
   if (!userId) {
-    router.replace("/login");
-    return null;
+    return null; // Navigation handled in useEffect
   }
 
   if (loading) {
@@ -736,23 +693,30 @@ export default function Home() {
             </Text>
             {userProfile?.role === 'player' && (
               <>
-                <TouchableOpacity
-                  style={[styles.createTeamBtn, { marginBottom: 10 }]}
-                  onPress={handleJoinLadder}
-                  disabled={!selectedLadder || !vineId}
-                >
-                  <Text style={styles.createTeamBtnText}>
-                    Join {segment} Ladder
-                  </Text>
-                </TouchableOpacity>
-                {segment === "Doubles" && (
-                  <TouchableOpacity
-                    style={styles.createTeamBtn}
-                    onPress={() => setModalVisible(true)}
-                  >
-                    <Text style={styles.createTeamBtnText}>+ Create Team</Text>
-                  </TouchableOpacity>
-                )}
+                {segment === "Singles"
+                  ? !singlesStandings.some(p => p.user_id === userId) && (
+                      <TouchableOpacity
+                        style={[styles.createTeamBtn, { marginBottom: 10 }]}
+                        onPress={handleJoinLadder}
+                        disabled={!selectedLadder || !vineId}
+                      >
+                        <Text style={styles.createTeamBtnText}>
+                          Join {segment} Ladder
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  : !doublesStandings.some(t => userTeams?.includes(t.team_id)) && (
+                      <TouchableOpacity
+                        style={[styles.createTeamBtn, { marginBottom: 10 }]}
+                        onPress={handleJoinLadder}
+                        disabled={!selectedLadder || !vineId}
+                      >
+                        <Text style={styles.createTeamBtnText}>
+                          Join {segment} Ladder
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
               </>
             )}
             {userProfile?.role === 'coordinator' && (
@@ -827,31 +791,12 @@ export default function Home() {
           selectedLadder={selectedLadder}
           onSelectLadder={setSelectedLadder}
         />
-        {segment === "Singles"
-          ? !singlesStandings.some(p => p.user_id === userId) && userProfile?.role === 'player' && (
-              <TouchableOpacity
-                style={[styles.createTeamBtn, { marginBottom: 10 }]}
-                onPress={handleJoinLadder}
-              >
-                <Text style={styles.createTeamBtnText}>Join Ladder</Text>
-              </TouchableOpacity>
-            )
-          : !doublesStandings.some(t => userTeams?.includes(t.team_id)) && userProfile?.role === 'player' && (
-              <TouchableOpacity
-                style={[styles.createTeamBtn, { marginBottom: 10 }]}
-                onPress={handleJoinLadder}
-              >
-                <Text style={styles.createTeamBtnText}>Join Ladder</Text>
-              </TouchableOpacity>
-            )}
+
         {segment === "Singles" ? (
           singlesStandings.length > 0 ? (
             <StandingsList
-              data={singlesStandings}
-              segment="Singles"
-              onChallenge={setChallengeTarget}
-              isCoordinator={userProfile?.role === 'coordinator'}
-              onRemove={item => handleRemoveFromLadder(item)}
+              data={singlesStandings.map(item => ({ ...item, name: item.player_name }))}
+              segment="Singles" onChallenge={setChallengeTarget} isCoordinator={userProfile?.role === 'coordinator'} onRemove={item => handleRemoveFromLadder(item)}
             />
           ) : (
             <Text style={{ color: '#888', textAlign: 'center', marginVertical: 16 }}>
@@ -862,7 +807,7 @@ export default function Home() {
           <>
             {doublesStandings.length > 0 ? (
               <StandingsList
-                data={doublesStandings}
+                data={doublesStandings.map(item => ({ ...item, team_name: item.name }))}
                 segment="Doubles"
                 onChallenge={setChallengeTarget}
                 userTeams={userTeams}

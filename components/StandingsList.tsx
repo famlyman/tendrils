@@ -3,23 +3,26 @@ import { View, Text, FlatList, StyleSheet, TouchableOpacity } from "react-native
 
 interface PlayerProfile {
   user_id: string;
-  name: string;
+  name?: string;
+  player_name?: string;
   rating: number;
   wins: number;
   losses: number;
   position: number;
+  ladder_id?: string;
 }
 
 interface TeamProfile {
+  members: any;
   team_id: string;
-  name: string;
-  members: string[];
+  team_name: string;
   wins: number;
   losses: number;
   position: number;
+  ladder_id?: string;
 }
 
-type StandingsItem = PlayerProfile | TeamProfile;
+export type StandingsItem = PlayerProfile | TeamProfile;
 
 interface StandingsListProps {
   data: StandingsItem[];
@@ -48,8 +51,8 @@ const StandingsList: React.FC<StandingsListProps> = ({ data, segment, onChalleng
         >
           <Text style={styles.name}>
             {"user_id" in item
-              ? `${item.position}. ${item.name} (Rating: ${item.rating})`
-              : `${item.position}. ${item.name} (Members: ${(item as TeamProfile).members.join(", ")})`}
+              ? `${item.position}. ${(item.name || item.player_name) ?? "Unknown"} (Rating: ${item.rating})`
+              : `${item.position}. ${(item as TeamProfile).team_name}`}
           </Text>
           <Text>
             Wins: {item.wins} | Losses: {item.losses}

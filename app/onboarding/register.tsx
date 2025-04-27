@@ -1,5 +1,6 @@
 // app/onboarding/register.tsx
 import React, { useState } from "react";
+import uuid from 'react-native-uuid';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity } from "react-native";
 import { Button } from "react-native-elements";
 import { router } from "expo-router";
@@ -16,18 +17,33 @@ export default function Register() {
 
   const handleSignUp = async () => {
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
+    const { data: signUpData, error } = await supabase.auth.signUp({
       email,
       password,
     });
 
-    setLoading(false);
     if (error) {
+      setLoading(false);
       alert("Error signing up: " + error.message);
-    } else {
-      // Navigate to the next step after successful sign-up
-      router.push("/onboarding/join-vine");
+      return;
     }
+
+    // Wait for session to be available
+    let userId = signUpData?.user?.id;
+    if (!userId) {
+      // Try to fetch the user from auth
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) {
+        setLoading(false);
+        alert("Could not get user after sign up.");
+        return;
+      }
+      userId = userData.user.id;
+    }
+
+    setLoading(false);
+    // Navigate to the next step after successful sign-up
+    router.push("/onboarding/join-vine");
   };
 
   return (

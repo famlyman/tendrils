@@ -46,6 +46,58 @@ export default function JoinVine() {
       alert("Please select a public vine to join.");
       return;
     }
+
+    // Get user session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session) {
+      alert("Could not get user session. Please log in again.");
+      return;
+    }
+    const userId = session.user.id;
+
+    // Get player role id
+    const { data: roleRow, error: roleError } = await supabase
+      .from("roles")
+      .select("id")
+      .eq("name", "player")
+      .single();
+    if (roleError || !roleRow?.id) {
+      alert("Could not find 'player' role in roles table.");
+      return;
+    }
+    const playerRoleId = roleRow.id;
+
+    // Insert into user_roles
+    const { error: userRoleError } = await supabase
+      .from("user_roles")
+      .insert({
+        user_id: userId,
+        role: playerRoleId,
+        vine_id: selectedVine,
+      });
+    if (userRoleError) {
+      alert("Failed to assign 'player' role: " + userRoleError.message);
+      return;
+    }
+
+    // Auto-add user to default ladder (first ladder for this vine)
+    const { data: ladders, error: ladderError } = await supabase
+      .from("ladders")
+      .select("ladder_id")
+      .eq("vine_id", selectedVine)
+      .order("created_at", { ascending: true })
+      .limit(1);
+    if (!ladderError && ladders && ladders.length > 0) {
+      const ladderId = ladders[0].ladder_id;
+      // Insert user into the ladder
+      await supabase.from("user_ladder_nodes").insert({
+        user_id: userId,
+        ladder_id: ladderId,
+        vine_id: selectedVine,
+        position: 1, // Or use logic to determine position
+      });
+    }
+
     router.push({ pathname: "/onboarding/profile", params: { vine_id: selectedVine } });
   };
 
@@ -67,6 +119,57 @@ export default function JoinVine() {
     if (error || !data) {
       alert("Invalid join code. Please try again.");
     } else {
+      // Get user session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        alert("Could not get user session. Please log in again.");
+        return;
+      }
+      const userId = session.user.id;
+
+      // Get player role id
+      const { data: roleRow, error: roleError } = await supabase
+        .from("roles")
+        .select("id")
+        .eq("name", "player")
+        .single();
+      if (roleError || !roleRow?.id) {
+        alert("Could not find 'player' role in roles table.");
+        return;
+      }
+      const playerRoleId = roleRow.id;
+
+      // Insert into user_roles
+      const { error: userRoleError } = await supabase
+        .from("user_roles")
+        .insert({
+          user_id: userId,
+          role: playerRoleId,
+          vine_id: data.vine_id,
+        });
+      if (userRoleError) {
+        alert("Failed to assign 'player' role: " + userRoleError.message);
+        return;
+      }
+
+      // Auto-add user to default ladder (first ladder for this vine)
+      const { data: ladders, error: ladderError } = await supabase
+        .from("ladders")
+        .select("ladder_id")
+        .eq("vine_id", data.vine_id)
+        .order("created_at", { ascending: true })
+        .limit(1);
+      if (!ladderError && ladders && ladders.length > 0) {
+        const ladderId = ladders[0].ladder_id;
+        // Insert user into the ladder
+        await supabase.from("user_ladder_nodes").insert({
+          user_id: userId,
+          ladder_id: ladderId,
+          vine_id: data.vine_id,
+          position: 1, // Or use logic to determine position
+        });
+      }
+
       router.push({ pathname: "/onboarding/profile", params: { vine_id: data.vine_id } });
     }
   };

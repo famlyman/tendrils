@@ -10,6 +10,12 @@ import { LinearGradient } from "expo-linear-gradient";
 
 const SEGMENTS = ["Recent", "Upcoming"];
 
+interface Profile {
+  user_id: string;
+  name: string;
+  // Add other fields from profiles as needed
+}
+
 interface Challenge {
   flower_id: string;
   vine_id: string;
@@ -315,11 +321,16 @@ export default function Matches() {
 
   const data = segment === "Recent" ? challenges : upcomingChallenges;
 
-  const renderMatch = ({ item }: { item: Challenge }) => (
+  type ChallengeWithProfiles = Challenge & {
+  challenger?: Profile | null;
+  opponent?: Profile | null;
+};
+
+const renderMatch = ({ item }: { item: ChallengeWithProfiles }) => (
     <View style={styles.challengeCard}>
       <Text style={styles.challengeTitle}>
         {item.match_type === "singles"
-          ? `${item.challenger_name} vs ${item.opponent_name}`
+          ? `${item.challenger?.name || "Unknown"} vs ${item.opponent?.name || "Unknown"}`
           : `${item.team_1_name} vs ${item.team_2_name}`}
       </Text>
       <Text style={styles.challengeMeta}>
