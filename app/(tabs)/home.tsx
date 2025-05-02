@@ -172,7 +172,7 @@ export default function Home() {
   const [userTeams, setUserTeams] = useState<string[]>([]);
   const router = useRouter();
   const { userId, loading: authLoading } = useAuth();
-  const [userProfile, setUserProfile] = useState<{ role: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ roles: string[] }>({ roles: [] });
   const [ladders, setLadders] = useState<Ladder[]>([]);
   const [selectedLadder, setSelectedLadder] = useState<Ladder | null>(null);
 
@@ -208,7 +208,7 @@ export default function Home() {
         
         setLadders([]);
         // Allow coordinators to proceed without ladders
-        if (userProfile?.role === 'coordinator') {
+        if (userProfile?.roles.includes('coordinator')) {
           setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
         }
         return;
@@ -229,7 +229,7 @@ export default function Home() {
       if (!ladderData || ladderData.length === 0) {
         
         setLadders([]);
-        if (userProfile?.role === 'coordinator') {
+        if (userProfile?.roles.includes('coordinator')) {
           setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
         }
         return;
@@ -243,16 +243,15 @@ export default function Home() {
     } catch (e) {
       // (error logging removed for production)'[DEBUG] Unexpected error in fetchLadders:', e);
       setLadders([]);
-      if (userProfile?.role === 'coordinator') {
+      if (userProfile?.roles.includes('coordinator')) {
         setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
       }
     }
   }, [vineId, userId, userProfile, selectedLadder]);
 
-  const fetchUserRole = useCallback(async () => {
+  const fetchUserRoles = useCallback(async () => {
     if (!userId || !vineId) {
-      
-      setUserProfile({ role: 'none' });
+      setUserProfile({ roles: [] });
       return;
     }
     try {
@@ -260,21 +259,19 @@ export default function Home() {
         .from('user_roles')
         .select('role:roles(name)')
         .eq('user_id', userId)
-        .eq('vine_id', vineId)
-        .single() as { data: UserRoleResponse | null; error: any };
+        .eq('vine_id', vineId);
       if (error) {
-        // (error logging removed for production)'[DEBUG] Error fetching user role:', error);
-        setUserProfile({ role: 'none' });
-        Alert.alert('Error', 'Failed to fetch user role.');
+        setUserProfile({ roles: [] });
+        Alert.alert('Error', 'Failed to fetch user roles.');
         return;
       }
-      const roleName = data?.role?.name || 'none';
-      
-      setUserProfile({ role: roleName });
+      const roles = (data || [])
+        .map((item: any) => item.role?.name)
+        .filter((name: string) => typeof name === 'string');
+      setUserProfile({ roles });
     } catch (e) {
-      // (error logging removed for production)'[DEBUG] Unexpected error fetching user role:', e);
-      setUserProfile({ role: 'none' });
-      Alert.alert('Error', 'Failed to fetch user role.');
+      setUserProfile({ roles: [] });
+      Alert.alert('Error', 'Failed to fetch user roles.');
     }
   }, [userId, vineId]);
 
@@ -318,7 +315,7 @@ export default function Home() {
 
   useEffect(() => {
     if (vineId && userId) {
-      fetchUserRole();
+      fetchUserRoles();
       fetchLadders();
     }
   }, [vineId, userId]);
@@ -390,7 +387,7 @@ export default function Home() {
         .from('ladders')
         .insert({
           vine_id: vineId,
-          name: `Ladder for ${userProfile?.role === 'coordinator' ? 'Coordinator' : 'User'}`,
+          name: `Ladder for ${userProfile?.roles.includes('coordinator') ? 'Coordinator' : 'User'}`,
           type: 'singles',
         })
         .select()
@@ -672,7 +669,7 @@ export default function Home() {
     );
   }
 
-  if (userProfile.role === 'none') {
+  if (!userProfile.roles || userProfile.roles.length === 0) {
     return (
       <BackgroundWrapper>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -691,7 +688,7 @@ export default function Home() {
           <Text style={{ color: '#888', fontSize: 18 }}>
             No ladder selected. Please select or create a ladder.
           </Text>
-          {userProfile.role === 'coordinator' && (
+          {userProfile.roles.includes('coordinator') && (
             <TouchableOpacity
               style={styles.createTeamBtn}
               onPress={handleCreateLadder}
@@ -717,7 +714,7 @@ export default function Home() {
             <Text style={{ color: '#888', fontSize: 18, marginVertical: 16 }}>
               No {segment.toLowerCase()} standings found.
             </Text>
-            {userProfile?.role === 'player' && (
+            {userProfile?.roles.includes('player') && (
               <>
                 {segment === "Singles"
                   ? !singlesStandings.some(p => p.user_id === userId) && (
@@ -745,7 +742,7 @@ export default function Home() {
 
               </>
             )}
-            {userProfile?.role === 'coordinator' && (
+            {userProfile?.roles.includes('coordinator') && (
               <Text style={{ color: '#888', fontSize: 16 }}>
                 As a coordinator, you can manage ladders or invite players.
               </Text>
@@ -822,7 +819,7 @@ export default function Home() {
           singlesStandings.length > 0 ? (
             <StandingsList
               data={singlesStandings.map(item => ({ ...item, name: item.player_name }))}
-              segment="Singles" onChallenge={setChallengeTarget} isCoordinator={userProfile?.role === 'coordinator'} onRemove={item => handleRemoveFromLadder(item)}
+              segment="Singles" onChallenge={setChallengeTarget} isCoordinator={userProfile?.roles.includes('coordinator')} onRemove={item => handleRemoveFromLadder(item)}
             />
           ) : (
             <Text style={{ color: '#888', textAlign: 'center', marginVertical: 16 }}>
@@ -837,7 +834,7 @@ export default function Home() {
                 segment="Doubles"
                 onChallenge={setChallengeTarget}
                 userTeams={userTeams}
-                isCoordinator={userProfile?.role === 'coordinator'}
+                isCoordinator={userProfile?.roles.includes('coordinator')}
                 onRemove={item => handleRemoveFromLadder(item)}
               />
             ) : (
@@ -845,7 +842,7 @@ export default function Home() {
                 No doubles standings available.
               </Text>
             )}
-            {userProfile?.role === 'player' && (
+            {userProfile?.roles.includes('player') && (
               <TouchableOpacity
                 style={styles.createTeamBtn}
                 onPress={() => setModalVisible(true)}
@@ -859,7 +856,7 @@ export default function Home() {
           visible={modalVisible}
           onClose={() => setModalVisible(false)}
           onCreateTeam={({ name, members }) => handleCreateTeam({ name, members })}
-          userRole={userProfile?.role || ''}
+          userRole={userProfile?.roles[0] || ''}
           userId={userId || ''}
         />
       </View>

@@ -330,8 +330,8 @@ const renderMatch = ({ item }: { item: ChallengeWithProfiles }) => (
     <View style={styles.challengeCard}>
       <Text style={styles.challengeTitle}>
         {item.match_type === "singles"
-          ? `${item.challenger?.name || "Unknown"} vs ${item.opponent?.name || "Unknown"}`
-          : `${item.team_1_name} vs ${item.team_2_name}`}
+          ? `${item.challenger?.name || "Unknown"} ${segment === "Recent" && item.status === "completed" && item.winner_id === item.challenger_id ? "🏆 (Winner)" : ""} vs ${item.opponent?.name || "Unknown"} ${segment === "Recent" && item.status === "completed" && item.winner_id === item.opponent_id ? "🏆 (Winner)" : ""}`
+          : `${item.team_1_name} ${segment === "Recent" && item.status === "completed" && item.winner_id === item.team_1_id ? "🏆 (Winner)" : ""} vs ${item.team_2_name} ${segment === "Recent" && item.status === "completed" && item.winner_id === item.team_2_id ? "🏆 (Winner)" : ""}`}
       </Text>
       <Text style={styles.challengeMeta}>
         {new Date(item.date).toLocaleString()} | Status: {item.status}
@@ -343,6 +343,14 @@ const renderMatch = ({ item }: { item: ChallengeWithProfiles }) => (
       )}
       {item.score && (
         <Text style={styles.challengeScore}>Score: {item.score}</Text>
+      )}
+      {/* Winner Display for Completed Matches */}
+      {segment === "Recent" && item.status === "completed" && item.winner_id && (
+        <Text style={[styles.challengeMeta, { fontWeight: 'bold', color: '#bfa100' }]}>🏆 Winner: {
+          item.match_type === 'singles'
+            ? (item.winner_id === item.challenger_id ? item.challenger_name : item.opponent_name)
+            : (item.winner_id === item.team_1_id ? item.team_1_name : item.team_2_name)
+        }</Text>
       )}
       {segment === "Upcoming" && canAcceptDecline(item) && (
         <View style={styles.buttonRow}>

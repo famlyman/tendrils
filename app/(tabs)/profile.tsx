@@ -96,26 +96,22 @@ export default function Profile() {
           
           setName(fullName);
 
-          const { data: userRoleData, error: userRoleError } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", session.user.id);
-          if (userRoleError) throw userRoleError;
+          type UserRoleWithName = { role: { name: string } | null };
+const { data: userRoleData, error: userRoleError } = await supabase
+  .from("user_roles")
+  .select("role:role(name)")
+  .eq("user_id", session.user.id);
+if (userRoleError) throw userRoleError;
 
-          let roleNames: string[] = [];
-          if (userRoleData && userRoleData.length > 0) {
-            const roleIds = userRoleData.map(item => item.role);
-            const { data: roleData, error: roleError } = await supabase
-              .from("roles")
-              .select("name")
-              .in("id", roleIds);
-            if (roleError) throw roleError;
-
-            roleNames = roleData.map(item => item.name);
-            setRoles(roleNames);
-          } else {
-            setRoles([]);
-          }
+let roleNames: string[] = [];
+if (userRoleData && userRoleData.length > 0) {
+  roleNames = (userRoleData as unknown as UserRoleWithName[])
+    .map(item => Array.isArray(item.role) ? item.role[0]?.name : item.role?.name)
+    .filter((name): name is string => typeof name === 'string');
+  setRoles(roleNames);
+} else {
+  setRoles([]);
+}
 
           const { data: profileData, error: profileError } = await supabase
             .from("profiles")

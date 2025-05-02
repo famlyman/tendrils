@@ -10,6 +10,11 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { supabase } from "../supabase";
+import { COLORS, TYPOGRAPHY } from "../constants/theme";
+
+
+
+
 import { router } from "expo-router";
 
 import SeasonManager from "../components/SeasonManager";
@@ -17,6 +22,12 @@ import CoordinatorMatchesSection from "../components/CoordinatorMatchesSection";
 import SendAnnouncementModal from "../components/SendAnnouncementModal";
 import AddLadderModal from "../components/AddLadderModal";
 import EditLadderModal from "../components/EditLadderModal";
+
+interface Profile {
+  id: string;
+  name: string;
+  // Add other fields from profiles as needed
+}
 
 export default function CoordinatorDashboard() {
   const [laddersRefreshTrigger, setLaddersRefreshTrigger] = useState(0);
@@ -49,7 +60,7 @@ export default function CoordinatorDashboard() {
   useEffect(() => {
     const fetchPlayers = async () => {
       try {
-        const { data, error } = await supabase.from("profiles").select("id, name");
+        const { data, error } = await supabase.from("profiles").select("user_id, name");
         if (error) throw error;
         setPlayers(data || []);
       } catch (err) {
@@ -70,20 +81,16 @@ export default function CoordinatorDashboard() {
           return;
         }
 
+        type UserRoleWithName = { role: { name: string } | null };
         const { data: roleData, error: roleError } = await supabase
           .from("user_roles")
-          .select("role")
+          .select("role:role(name)")
           .eq("user_id", user.id);
         if (roleError) throw roleError;
 
-        const roleIds = roleData.map((item) => item.role);
-        const { data: roles, error: rolesError } = await supabase
-          .from("roles")
-          .select("name")
-          .in("id", roleIds);
-        if (rolesError) throw rolesError;
-
-        const roleNames = roles.map((r) => r.name);
+        const roleNames = ((roleData || []) as unknown as UserRoleWithName[])
+          .map((item) => Array.isArray(item.role) ? item.role[0]?.name : item.role?.name)
+          .filter((name): name is string => typeof name === 'string');
         setUserRoles(roleNames);
 
         if (!roleNames.some((role) => role.toLowerCase() === "coordinator")) {
@@ -202,7 +209,7 @@ export default function CoordinatorDashboard() {
             {item.data.length === 0 ? (
               <Text>No pending teams.</Text>
             ) : (
-              item.data.map((team: any) => (
+              item.data.map((team: { team_id: string; name: string; status: string }) => (
                 <View key={team.team_id} style={styles.teamCard}>
                   <Text style={styles.teamName}>{team.name}</Text>
                   <Text>Status: {team.status}</Text>
@@ -306,7 +313,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 20 },
   sectionCard: {
     backgroundColor: "#f9f9f9",
-    borderRadius: 12,
+    borderRadius: 18,
     padding: 16,
     marginBottom: 22,
     shadowColor: "#000",
@@ -316,10 +323,10 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   header: { fontSize: 22, fontWeight: "bold", marginBottom: 16 },
-  teamCard: { backgroundColor: "#fff", padding: 16, borderRadius: 8, marginBottom: 12 },
+  teamCard: { backgroundColor: "#fff", padding: 16, borderRadius: 12, marginBottom: 12 },
   teamName: { fontSize: 18, fontWeight: "bold" },
   ladderCard: {
-    backgroundColor: "#e3f2fd",
+    backgroundColor: "#f0f0f0",
     padding: 14,
     borderRadius: 8,
     marginBottom: 10,
@@ -327,11 +334,11 @@ const styles = StyleSheet.create({
   ladderName: { fontSize: 18, fontWeight: "bold", color: "#1976d2" },
   actionRow: { flexDirection: "row", gap: 12, marginTop: 8 },
   announceBtn: {
-    backgroundColor: "#2196f3",
+    backgroundColor: COLORS.secondary,
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
     marginBottom: 18,
   },
-  announceBtnText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+  announceBtnText: { color: COLORS.text.dark, fontWeight: "bold", fontSize: 16 },
 });
