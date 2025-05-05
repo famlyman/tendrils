@@ -16,7 +16,13 @@ const CoordinatorMatchList: React.FC<CoordinatorMatchListProps> = ({ ladderId, i
   const fetchMatches = async () => {
     const { data, error } = await supabase
       .from("flowers")
-      .select("*")
+      .select(`
+        *,
+        challenger:profiles!challenger_id (name),
+        opponent:profiles!opponent_id (name),
+        team_1:teams!team_1_id (name),
+        team_2:teams!team_2_id (name)
+      `)
       .eq("ladder_id", ladderId)
       .eq("status", "pending")
       .order("date", { ascending: true });
@@ -64,8 +70,8 @@ const CoordinatorMatchList: React.FC<CoordinatorMatchListProps> = ({ ladderId, i
           <View style={styles.matchCard}>
             <Text style={styles.matchText}>
               {isDoubles
-                ? `Team 1: ${item.team_1_id} vs Team 2: ${item.team_2_id}`
-                : `Challenger: ${item.challenger_id} vs Opponent: ${item.opponent_id}`}
+                ? `${item.team_1?.name || 'Unknown Team'} vs ${item.team_2?.name || 'Unknown Team'}`
+                : `${item.challenger?.name || 'Unknown Player'} vs ${item.opponent?.name || 'Unknown Player'}`}
             </Text>
             <TouchableOpacity style={styles.enterBtn} onPress={() => handleOpenModal(item)}>
               <Text style={styles.enterBtnText}>Enter Score</Text>

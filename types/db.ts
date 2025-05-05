@@ -13,6 +13,7 @@ export interface Flower {
   score: string;
   team_1_id: string;
   team_2_id: string;
+  ladder_id: string;
 }
 
 export interface FruitRecord {

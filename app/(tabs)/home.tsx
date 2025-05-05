@@ -563,8 +563,8 @@ export default function Home() {
   console.log('[DEBUG] vineId:', vineId);
   console.log('[DEBUG] userId:', userId);
   try {
-    if (!challengeTarget || !vineId || !userId) {
-      console.log('[DEBUG] Missing challengeTarget, vineId, or userId');
+    if (!challengeTarget || !vineId || !userId || !selectedLadder) {
+      console.log('[DEBUG] Missing challengeTarget, vineId, userId, or selectedLadder');
       return;
     }
     if ("user_id" in challengeTarget) {
@@ -572,11 +572,13 @@ export default function Home() {
         p_challenger_id: userId,
         p_opponent_id: challengeTarget.user_id,
         p_vine_id: vineId,
+        p_ladder_id: selectedLadder.ladder_id,
       });
       const { data, error } = await supabase.rpc("create_singles_challenge", {
         p_challenger_id: userId,
         p_opponent_id: challengeTarget.user_id,
         p_vine_id: vineId,
+        p_ladder_id: selectedLadder.ladder_id,
       });
       console.log('[DEBUG] Singles challenge result:', { data, error });
       if (error) {
@@ -593,10 +595,12 @@ export default function Home() {
         return;
       }
       console.log('[DEBUG] Doubles challenge params:', {
-        p_team_iettivi: true,
+        p_vine_id: vineId,
+        p_challenger_id: userId,
+        p_opponent_id: challengeTarget.user_id,
         p_team_1_id: userTeams[0],
         p_team_2_id: challengeTarget.team_id,
-        p_vine_id: vineId,
+        p_ladder_id: selectedLadder.ladder_id,
       });
       const { data, error } = await supabase.rpc("create_doubles_challenge", {
         p_vine_id: vineId,
@@ -604,6 +608,7 @@ export default function Home() {
         p_opponent_id: challengeTarget.user_id,
         p_team_1_id: userTeams[0],
         p_team_2_id: challengeTarget.team_id,
+        p_ladder_id: selectedLadder.ladder_id,
       });
       console.log('[DEBUG] Doubles challenge result:', { data, error });
       if (error) {
