@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, View, Text, TextInput, Button, StyleSheet, Alert, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
 import { supabase } from '../supabase';
+import { Picker } from '@react-native-picker/picker';
 
 interface TeamCreationModalProps {
   visible: boolean;
@@ -27,25 +28,41 @@ const TeamCreationModal: React.FC<TeamCreationModalProps> = ({
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [checkingName, setCheckingName] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
+  const [allPlayers, setAllPlayers] = useState<any[]>([]);
+  const [eligiblePlayers, setEligiblePlayers] = useState<any[]>([]);
 
-  // Search for registered users
+  // Fetch all registered users and filter eligible players
   useEffect(() => {
-    if (search.length < 2) {
-      setSearchResults([]);
-      return;
-    }
+    if (!ladderId) return;
     let active = true;
     (async () => {
-      const { data, error } = await supabase
+      // Fetch all users
+      const { data: users, error: userErr } = await supabase
         .from('profiles')
-        .select('id, name, email')
-        .ilike('name', `%${search}%`);
-      if (!error && active) {
-        setSearchResults(data.filter((u: any) => u.id !== userId && !teammates.some(t => t.id === u.id)));
+        .select('id, name, email');
+      if (userErr || !users) return;
+      // Fetch all users already on a team in this ladder
+      const { data: teamUsers, error: teamErr } = await supabase
+        .from('user_teams')
+        .select('user_id')
+        .eq('ladder_id', ladderId);
+      if (teamErr) return;
+      const teamUserIds = (teamUsers || []).map(u => u.user_id);
+      // Filter out current user, already-added teammates, and users already on a team in this ladder
+      const eligible = users.filter(
+        (u: any) =>
+          u.id !== userId &&
+          !teammates.some(t => t.id === u.id) &&
+          !teamUserIds.includes(u.id)
+      );
+      if (active) {
+        setAllPlayers(users);
+        setEligiblePlayers(eligible);
       }
     })();
     return () => { active = false; };
-  }, [search, teammates, userId]);
+  }, [teammates, ladderId, userId]);
 
   // Invite by email (if not registered)
   const handleInviteByEmail = () => {
@@ -59,11 +76,13 @@ const TeamCreationModal: React.FC<TeamCreationModalProps> = ({
     setSearchResults([]);
   };
 
-  // Add teammate from search
-  const handleAddTeammate = (user: any) => {
-    setTeammates([...teammates, { id: user.id, email: user.email, name: user.name }]);
-    setSearch('');
-    setSearchResults([]);
+  // Add teammate from dropdown
+  const handleAddTeammateFromDropdown = (playerId: string) => {
+    const player = eligiblePlayers.find(u => u.id === playerId);
+    if (player) {
+      setTeammates([...teammates, { id: player.id, email: player.email, name: player.name }]);
+      setSelectedPlayer(null);
+    }
   };
 
   // Remove teammate
@@ -176,32 +195,45 @@ const TeamCreationModal: React.FC<TeamCreationModalProps> = ({
             onChangeText={setTeamName}
             autoCapitalize="words"
           />
-          {checkingName && <ActivityIndicator size="small" color="#2196f3" />}
-          <Text style={styles.label}>Add Teammates (up to {MAX_TEAM_SIZE - 1})</Text>
+          {/* Always-visible dropdown for player selection */}
+          <Text style={styles.label}>Add a Registered Player</Text>
+          <View style={styles.pickerContainer}>
+            <Picker
+              selectedValue={selectedPlayer}
+              onValueChange={(itemValue) => {
+                if (itemValue) {
+                  handleAddTeammateFromDropdown(itemValue);
+                }
+              }}
+              style={styles.picker}
+              enabled={eligiblePlayers.length > 0}
+            >
+              <Picker.Item label={eligiblePlayers.length > 0 ? "Select a player..." : "No eligible players available"} value={null} color="#888" />
+              {eligiblePlayers.map(player => (
+                <Picker.Item key={player.id} label={`${player.name} (${player.email})`} value={player.id} />
+              ))}
+            </Picker>
+          </View>
+          {/* Debug: show eligible player count */}
+          <Text style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>Eligible players: {eligiblePlayers.length}</Text>
+          {eligiblePlayers.length === 0 && (
+            <Text style={{ color: 'red', marginBottom: 8 }}>No eligible players available to add.</Text>
+          )}
+          {/* Invite by email if not found in eligible players */}
           <TextInput
             style={styles.input}
             value={search}
             onChangeText={setSearch}
-            placeholder="Search by name or enter email"
+            placeholder="Enter email to invite"
             autoCapitalize="none"
             keyboardType="email-address"
           />
-          {search.length > 0 && searchResults.length > 0 && (
-            <FlatList
-              data={searchResults}
-              keyExtractor={item => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.searchItem} onPress={() => handleAddTeammate(item)}>
-                  <Text>{item.name} ({item.email})</Text>
-                </TouchableOpacity>
-              )}
-              style={styles.searchList}
-            />
-          )}
-          {search.length > 0 && searchResults.length === 0 && (
-            <TouchableOpacity style={styles.inviteBtn} onPress={handleInviteByEmail}>
-              <Text>Invite "{search}" by email</Text>
-            </TouchableOpacity>
+          {search.length > 0 &&
+            !allPlayers.some(u => u.email === search) &&
+            !teammates.some(t => t.email === search) && (
+              <TouchableOpacity style={styles.inviteBtn} onPress={handleInviteByEmail}>
+                <Text>Invite "{search}" by email</Text>
+              </TouchableOpacity>
           )}
           <View style={styles.teammateList}>
             <Text style={styles.label}>Current Teammates:</Text>
@@ -291,6 +323,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 8,
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  picker: {
+    height: 44,
+    width: '100%',
   },
 });
 

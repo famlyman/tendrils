@@ -32,10 +32,10 @@ const LadderSelector: React.FC<LadderSelectorProps> = ({ ladders, selectedLadder
 );
 
 const styles = StyleSheet.create({
-  ladderSelector: { flexDirection: "row", marginBottom: 16 },
+  ladderSelector: { flexDirection: "row", marginBottom: 16, justifyContent: 'center', alignItems: 'center' },
   ladderButton: { padding: 10, borderRadius: 6, borderWidth: 1, borderColor: "#ccc", marginRight: 8 },
   ladderButtonSelected: { backgroundColor: "#cceeff" },
-  ladderButtonText: { fontWeight: "bold" },
+  ladderButtonText: { fontWeight: "bold", textAlign: 'center' },
 });
 
 export default LadderSelector;

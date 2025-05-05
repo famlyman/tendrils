@@ -1,6 +1,8 @@
 // Modal for creating a doubles team: select partner, enter team name
-import React, { useState } from "react";
-import { Modal, View, Text, TouchableOpacity, TextInput, FlatList, StyleSheet } from "react-native";
+import React, { useState, useEffect } from "react";
+import { Modal, View, Text, TouchableOpacity, TextInput, StyleSheet } from "react-native";
+import { Picker } from "@react-native-picker/picker";
+import { supabase } from "../supabase";
 
 export default function CreateTeamModal({
   visible,
@@ -20,12 +22,34 @@ export default function CreateTeamModal({
   const [teamName, setTeamName] = useState("");
   const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (visible) {
+      // Fetch player profiles
+      supabase
+        .from("profiles")
+        .select("user_id, name")
+        .then(({ data, error }) => {
+          console.log("Fetched profiles:", data, error);
+          if (!error && data) setProfiles(data);
+        });
+      // Fetch teams
+      supabase
+        .from("teams")
+        .select("members")
+        .then(({ data, error }) => {
+          console.log("Fetched teams:", data, error);
+          if (!error && data) setTeams(data);
+        });
+    }
+  }, [visible]);
+
   // Exclude users already in a team and the current user
   const unavailableIds = new Set(teams.flatMap(t => t.members));
   unavailableIds.add(currentUserId);
   const availablePartners = profiles.filter(
     p => !unavailableIds.has(p.user_id)
   );
+  console.log("Available partners:", availablePartners);
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -39,20 +63,18 @@ export default function CreateTeamModal({
             style={styles.input}
           />
           <Text style={styles.subtitle}>Select a Partner</Text>
-          <FlatList
-            data={availablePartners}
-            keyExtractor={item => item.user_id}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[styles.partner, selectedPartner === item.user_id && styles.partnerSelected]}
-                onPress={() => setSelectedPartner(item.user_id)}
-              >
-                <Text style={styles.partnerText}>{item.name}</Text>
-              </TouchableOpacity>
-            )}
-            ListEmptyComponent={<Text style={styles.empty}>No available partners.</Text>}
-            style={{ maxHeight: 120, marginBottom: 12 }}
-          />
+          <View style={styles.pickerContainer}>
+            <Picker
+              selectedValue={selectedPartner}
+              onValueChange={itemValue => setSelectedPartner(itemValue)}
+              style={styles.picker}
+            >
+              <Picker.Item label="Select a partner..." value={null} color="#888" />
+              {availablePartners.map((p) => (
+                <Picker.Item key={p.user_id} label={p.name} value={p.user_id} color="#1A3C34" />
+              ))}
+            </Picker>
+          </View>
           <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.cancel} onPress={onClose}>
               <Text style={styles.cancelText}>Cancel</Text>
@@ -117,25 +139,19 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Bold",
     alignSelf: "flex-start",
   },
-  partner: {
-    padding: 10,
+  pickerContainer: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#A8E6CF',
     borderRadius: 8,
-    backgroundColor: "#F2F2F2",
-    marginBottom: 6,
+    backgroundColor: '#F2F2F2',
+    marginBottom: 12,
+    justifyContent: 'center',
   },
-  partnerSelected: {
-    backgroundColor: "#FFD54F",
-  },
-  partnerText: {
-    fontFamily: "Roboto-Regular",
-    fontSize: 15,
-    color: "#1A3C34",
-  },
-  empty: {
-    color: "#888",
-    fontSize: 14,
-    fontStyle: "italic",
-    marginVertical: 10,
+  picker: {
+    width: '100%',
+    height: 44,
+    color: '#1A3C34',
   },
   buttonRow: {
     flexDirection: "row",
