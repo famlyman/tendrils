@@ -550,115 +550,97 @@ export default function Home() {
     );
   };
 
-  const handleCreateTeam = async ({ name, members }: { name: string; members: string[] }) => {
+  const handleCreateTeam = async (team: { name: string; members: string[] }) => {
     try {
-      console.log('Creating team with:', { name, members, vineId, userId, selectedLadder });
-
-      if (!vineId || !userId || !selectedLadder) {
-        console.log('Missing required info:', { vineId, userId, selectedLadder });
-        Alert.alert("Error", "Missing information for team creation.");
+      // Set loading state to show feedback to user
+      setLoading(true);
+      console.log('[DEBUG] Creating team:', team);
+      
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('[DEBUG] No user found');
+        Alert.alert('Error', 'You must be logged in to create a team');
         return;
       }
-
-      // Create team
-      const { data: teamData, error: teamError } = await supabase
-        .from("teams")
-        .insert({ 
-          vine_id: vineId, 
-          name,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          status: 'active' // Ensure the team is created as active
-        })
-        .select()
-        .single();
-
-      if (teamError) {
-        console.error('Error creating team:', teamError);
-        throw teamError;
-      }
-
-      console.log('Team created:', teamData);
-
-      // Insert team members
-      const { error: membersError } = await supabase
-        .from("team_members")
-        .insert(
-          members.map(uid => ({ 
-            team_id: teamData.team_id, 
-            user_id: uid,
-            vine_id: vineId,
-            joined_at: new Date().toISOString()
-          }))
-        );
       
-      if (membersError) {
-        console.error('Error adding team members:', membersError);
-        throw membersError;
+      // Validate team name
+      if (!team.name || team.name.trim() === '') {
+        console.log('[DEBUG] Invalid team name');
+        Alert.alert('Error', 'Team name cannot be empty');
+        return;
       }
-
-      console.log('Team members added successfully');
-
-      // Add team to ladder
-      const { error: ladderError } = await supabase
-        .from("user_ladder_nodes")
+      
+      console.log('[DEBUG] Creating team with data:', {
+        name: team.name,
+        captain_id: user.id,
+        vine_id: vineId,
+        members: team.members
+      });
+      
+      // Create team with "active" status
+      const { data: newTeam, error: teamError } = await supabase
+        .from('teams')
         .insert({
-          team_id: teamData.team_id,
-          ladder_id: selectedLadder.ladder_id,
+          name: team.name,
+          captain_id: user.id,
           vine_id: vineId,
-          position: doublesStandings.length + 1
-        });
-
-      if (ladderError) {
-        console.error('Error adding team to ladder:', ladderError);
-        throw ladderError;
+          status: 'active'
+        })
+        .select('team_id')
+        .single();
+      
+      if (teamError || !newTeam) {
+        console.error('[DEBUG] Error creating team:', teamError);
+        Alert.alert('Error', teamError?.message || 'Failed to create team');
+        return;
       }
-
-      console.log('Team added to ladder successfully');
-
-      // Get user names for display
-      const { data: userData, error: userError } = await supabase
-        .from("profiles")
-        .select("user_id, name")
-        .in("user_id", members);
-
-      if (userError) {
-        console.error('Error fetching user names:', userError);
-        throw userError;
+      
+      console.log('[DEBUG] Team created successfully:', newTeam);
+      
+      // Add team members
+      const teamMembers = [
+        { user_id: user.id, team_id: newTeam.team_id, vine_id: vineId }, // Captain
+        ...team.members.map(memberId => ({
+          user_id: memberId,
+          team_id: newTeam.team_id,
+          vine_id: vineId
+        }))
+      ];
+      
+      console.log('[DEBUG] Adding team members:', teamMembers);
+      const { error: memberError } = await supabase
+        .from('team_members')
+        .insert(teamMembers);
+      
+      if (memberError) {
+        console.error('[DEBUG] Error adding team members:', memberError);
+        Alert.alert('Error', memberError.message || 'Failed to add team members');
+        
+        // Clean up - remove the team since members couldn't be added
+        await supabase.from('teams').delete().eq('team_id', newTeam.team_id);
+        return;
       }
-
-      const memberNames = userData?.map(u => u.name) || ['Unknown'];
-      console.log('Member names:', memberNames);
-
-      // Update local state
-      const newTeam = {
-        team_id: teamData.team_id,
-        name: teamData.name,
-        members: memberNames,
-        wins: 0,
-        losses: 0,
-        position: doublesStandings.length + 1,
-        ladder_id: selectedLadder.ladder_id,
-      };
-
-      console.log('Adding new team to standings:', newTeam);
-      setDoublesStandings(prev => [...prev, newTeam]);
-      setUserTeams(prev => [...prev, teamData.team_id]);
+      
+      // Update local state to include the new team
+      setUserTeams([...userTeams, newTeam.team_id]);
+      
+      // Close the modal
       setModalVisible(false);
-
-      // Show success message
-      Alert.alert(
-        "Success",
-        `Team "${name}" has been created successfully!`,
-        [{ text: "OK" }]
-      );
-
-      // Refresh standings
-      setLoading(true);
-      setSelectedLadder({ ...selectedLadder });
-    } catch (e) {
-      console.error('Error creating team:', e);
-      Alert.alert("Error", "Failed to create team. Please try again.");
+      
+      // Success - team created and active
+      Alert.alert('Success', 'Team created successfully!');
+      
+      // Refresh the data to show the new team
+      if (selectedLadder) {
+        setSelectedLadder({ ...selectedLadder });
+      }
+      
+    } catch (error) {
+      console.error('[DEBUG] Error in handleCreateTeam:', error);
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
     }
   };
 

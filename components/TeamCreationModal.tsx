@@ -87,18 +87,6 @@ const TeamCreationModal: React.FC<TeamCreationModalProps> = ({
     return () => { active = false; };
   }, [teammates, vineId, userId]);
 
-  // Invite by email (if not registered)
-  const handleInviteByEmail = () => {
-    if (!search || teammates.length >= MAX_TEAM_SIZE - 1) return;
-    if (teammates.some(t => t.user_id === search)) {
-      Alert.alert('Already added', 'This email is already in your team list.');
-      return;
-    }
-    setTeammates([...teammates, { user_id: search, invited: true }]);
-    setSearch('');
-    setSearchResults([]);
-  };
-
   // Add teammate from dropdown
   const handleAddTeammateFromDropdown = (playerId: string) => {
     const player = eligiblePlayers.find(u => u.user_id === playerId);
@@ -113,7 +101,7 @@ const TeamCreationModal: React.FC<TeamCreationModalProps> = ({
     setTeammates(teammates.filter(t => t.user_id !== user_id));
   };
 
-  // Create team handler
+  // Create team handler - Modified to remove approval flow
   const handleCreateTeam = async () => {
     try {
       console.log('TeamCreationModal: handleCreateTeam called');
@@ -143,7 +131,7 @@ const TeamCreationModal: React.FC<TeamCreationModalProps> = ({
         userId
       });
 
-      // Call the parent's onCreateTeam function
+      // Call the parent's onCreateTeam function - team will be created with "active" status directly
       await onCreateTeam({
         name: teamName,
         members: teammates.map(t => t.id || t.user_id || '')
@@ -176,17 +164,47 @@ const TeamCreationModal: React.FC<TeamCreationModalProps> = ({
     return !error && (!data || data.length === 0);
   };
 
-  // Check if any teammate is already on a team in this vine
-  const checkTeammateAvailability = async () => {
-    if (!vineId || teammates.length === 0) return true;
-    const ids = teammates.filter(t => t.id).map(t => t.id);
-    if (ids.length === 0) return true;
-    const { data, error } = await supabase
-      .from('team_members')
-      .select('user_id')
-      .in('user_id', ids)
-      .eq('vine_id', vineId);
-    return !error && (!data || data.length === 0);
+  // Add UI for selecting eligible players
+  const renderPlayerPickerSection = () => {
+    if (teammates.length >= MAX_TEAM_SIZE - 1) {
+      return <Text style={styles.infoText}>Maximum team size reached</Text>;
+    }
+
+    return (
+      <View style={styles.pickerSection}>
+        <Text style={styles.sectionTitle}>Add Players:</Text>
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={selectedPlayer || ''}
+            onValueChange={(itemValue) => {
+              if (itemValue) setSelectedPlayer(itemValue.toString());
+            }}
+            style={styles.picker}
+          >
+            <Picker.Item label="Select a player..." value="" />
+            {eligiblePlayers.map(player => (
+              <Picker.Item
+                key={player.user_id}
+                label={player.name || player.user_id}
+                value={player.user_id}
+              />
+            ))}
+          </Picker>
+          <TouchableOpacity
+            style={[
+              styles.addButton,
+              (!selectedPlayer) ? styles.addButtonDisabled : null
+            ]}
+            disabled={!selectedPlayer}
+            onPress={() => {
+              if (selectedPlayer) handleAddTeammateFromDropdown(selectedPlayer);
+            }}
+          >
+            <Text style={styles.addButtonText}>Add</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   };
 
   if (userRole !== 'player') return null;
@@ -209,22 +227,29 @@ const TeamCreationModal: React.FC<TeamCreationModalProps> = ({
             onChangeText={setTeamName}
           />
 
-          <View style={styles.teammateList}>
-            {teammates.map((teammate) => {
-              return (
-                <View key={teammate.user_id || teammate.id || ''} style={styles.teammateItem}>
-                  <Text>{teammate.name || teammate.user_id || ''}</Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      console.log('Removing teammate:', teammate.user_id || teammate.id || '');
-                      handleRemoveTeammate(teammate.user_id || teammate.id || '');
-                    }}
-                  >
-                    <MaterialIcons name="close" size={24} color="red" />
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
+          {renderPlayerPickerSection()}
+
+          <View style={styles.teammateSection}>
+            <Text style={styles.sectionTitle}>Team Members:</Text>
+            {teammates.length > 0 ? (
+              <View style={styles.teammateList}>
+                {teammates.map((teammate) => (
+                  <View key={teammate.user_id || teammate.id || ''} style={styles.teammateItem}>
+                    <Text>{teammate.name || teammate.user_id || ''}</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        console.log('Removing teammate:', teammate.user_id || teammate.id || '');
+                        handleRemoveTeammate(teammate.user_id || teammate.id || '');
+                      }}
+                    >
+                      <MaterialIcons name="close" size={24} color="red" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.infoText}>No team members added yet</Text>
+            )}
           </View>
 
           <TouchableOpacity
@@ -279,20 +304,63 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 12,
   },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  pickerSection: {
+    marginVertical: 12,
+  },
+  pickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  picker: {
+    flex: 1,
+    height: 50,
+  },
+  addButton: {
+    backgroundColor: '#007bff',
+    padding: 10,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  addButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  addButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  teammateSection: {
+    marginTop: 16,
+  },
   teammateList: {
-    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderRadius: 6,
+    padding: 8,
   },
   teammateItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  infoText: {
+    fontStyle: 'italic',
+    color: '#666',
+    marginVertical: 8,
   },
   createButton: {
     padding: 12,
     backgroundColor: '#007bff',
     borderRadius: 6,
-    marginTop: 12,
+    marginTop: 20,
     alignItems: 'center',
   },
   createButtonText: {

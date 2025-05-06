@@ -11,10 +11,6 @@ import {
 } from "react-native";
 import { supabase } from "../supabase";
 import { COLORS, TYPOGRAPHY } from "../constants/theme";
-
-
-
-
 import { router } from "expo-router";
 
 import SeasonManager from "../components/SeasonManager";
@@ -32,7 +28,6 @@ interface Profile {
 export default function CoordinatorDashboard() {
   const [laddersRefreshTrigger, setLaddersRefreshTrigger] = useState(0);
   const [userRoles, setUserRoles] = useState<string[]>([]);
-  const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [ladders, setLadders] = useState<any[]>([]);
   const [players, setPlayers] = useState<any[]>([]);
@@ -70,9 +65,9 @@ export default function CoordinatorDashboard() {
     fetchPlayers();
   }, []);
 
-  // Fetch user and teams
+  // Fetch user and validate coordinator role
   useEffect(() => {
-    const fetchUserAndTeams = async () => {
+    const fetchUserAndValidateRole = async () => {
       try {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user) {
@@ -98,51 +93,14 @@ export default function CoordinatorDashboard() {
           router.replace("/(tabs)/home");
           return;
         }
-
-        const { data: teamData, error: teamError } = await supabase
-          .from("teams")
-          .select("team_id, name, status")
-          .eq("status", "pending")
-          .order("created_at");
-        if (teamError) throw teamError;
-
-        setTeams(teamData);
       } catch (err) {
-        
+        console.error("Error fetching user data:", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchUserAndTeams();
+    fetchUserAndValidateRole();
   }, []);
-
-  // Approve handler
-  const handleApprove = async (team_id: string) => {
-    const { error } = await supabase
-      .from("teams")
-      .update({ status: "approved" })
-      .eq("team_id", team_id);
-    if (!error) {
-      setTeams(teams.filter((t) => t.team_id !== team_id));
-      Alert.alert("Success", "Team approved.");
-    } else {
-      Alert.alert("Error", "Could not approve team.");
-    }
-  };
-
-  // Reject handler
-  const handleReject = async (team_id: string) => {
-    const { error } = await supabase
-      .from("teams")
-      .update({ status: "rejected" })
-      .eq("team_id", team_id);
-    if (!error) {
-      setTeams(teams.filter((t) => t.team_id !== team_id));
-      Alert.alert("Success", "Team rejected.");
-    } else {
-      Alert.alert("Error", "Could not reject team.");
-    }
-  };
 
   // Handle sending announcement
   const handleSendAnnouncement = async ({
@@ -181,16 +139,15 @@ export default function CoordinatorDashboard() {
 
   if (loading) return <ActivityIndicator />;
 
-  // Define data structure for FlatList
+  // Define data structure for FlatList - removed pending teams section
   const sections = [
     { type: "announcement_button" },
-    { type: "pending_teams", data: teams },
     { type: "ladders", data: ladders },
     { type: "seasons" },
     ...(ladders.length > 0 ? [{ type: "pending_matches", ladderId: ladders[0].ladder_id }] : []),
   ];
 
-  // Render each section
+  // Render each section - removed pending teams rendering
   const renderItem = ({ item }: { item: any }) => {
     switch (item.type) {
       case "announcement_button":
@@ -201,30 +158,6 @@ export default function CoordinatorDashboard() {
           >
             <Text style={styles.announceBtnText}>Send Announcement</Text>
           </TouchableOpacity>
-        );
-      case "pending_teams":
-        return (
-          <View style={styles.sectionCard}>
-            <Text style={styles.header}>Pending Teams</Text>
-            {item.data.length === 0 ? (
-              <Text>No pending teams.</Text>
-            ) : (
-              item.data.map((team: { team_id: string; name: string; status: string }) => (
-                <View key={team.team_id} style={styles.teamCard}>
-                  <Text style={styles.teamName}>{team.name}</Text>
-                  <Text>Status: {team.status}</Text>
-                  <View style={styles.actionRow}>
-                    <Button title="Approve" onPress={() => handleApprove(team.team_id)} />
-                    <Button
-                      title="Reject"
-                      onPress={() => handleReject(team.team_id)}
-                      color="red"
-                    />
-                  </View>
-                </View>
-              ))
-            )}
-          </View>
         );
       case "ladders":
         return (
@@ -285,7 +218,7 @@ export default function CoordinatorDashboard() {
         onClose={() => setAnnouncementModalVisible(false)}
         onSend={handleSendAnnouncement}
         ladders={ladders}
-        teams={teams}
+        teams={[]} // Empty array since we no longer track pending teams
         players={players}
       />
       <EditLadderModal
@@ -323,8 +256,6 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   header: { fontSize: 22, fontWeight: "bold", marginBottom: 16 },
-  teamCard: { backgroundColor: "#fff", padding: 16, borderRadius: 12, marginBottom: 12 },
-  teamName: { fontSize: 18, fontWeight: "bold" },
   ladderCard: {
     backgroundColor: "#f0f0f0",
     padding: 14,
@@ -332,7 +263,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   ladderName: { fontSize: 18, fontWeight: "bold", color: "#1976d2" },
-  actionRow: { flexDirection: "row", gap: 12, marginTop: 8 },
   announceBtn: {
     backgroundColor: COLORS.secondary,
     padding: 12,
