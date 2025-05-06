@@ -60,6 +60,11 @@ interface Ladder {
 import type { StandingsItem } from "../../components/StandingsList";
 type ChallengeTarget = StandingsItem | null;
 
+interface TeamMember {
+  team_id: string;
+  name: string;
+}
+
 const styles = StyleSheet.create({
   challengeBtn: {
     marginLeft: 'auto',
@@ -328,7 +333,9 @@ export default function Home() {
     setLoading(true);
     const fetchStandings = async () => {
       try {
+        console.log('Fetching standings for:', { selectedLadder, vineId, userId });
         
+        // Fetch singles standings
         const { data: singlesData, error: singlesError } = await supabase
           .from("singles_standings")
           .select("*")
@@ -336,33 +343,87 @@ export default function Home() {
           .order("position", { ascending: true });
 
         if (singlesError) {
-          setSinglesStandings([]);
-        } else if (!singlesData || singlesData.length === 0) {
+          console.error('Error fetching singles standings:', singlesError);
           setSinglesStandings([]);
         } else {
-          setSinglesStandings(singlesData);
+          console.log('Singles standings:', singlesData);
+          setSinglesStandings(singlesData || []);
         }
 
+        // Fetch doubles standings with team details
         const { data: doublesData, error: doublesError } = await supabase
-          .from("doubles_standings")
-          .select("*")
+          .from("user_ladder_nodes")
+          .select(`
+            team_id,
+            position,
+            teams!user_ladder_nodes_team_id_fkey (
+              team_id,
+              name
+            )
+          `)
           .eq("ladder_id", selectedLadder.ladder_id)
+          .eq("vine_id", vineId)
+          .not("team_id", "is", null)
           .order("position", { ascending: true });
+
         if (doublesError) {
-          setDoublesStandings([]);
-        } else if (!doublesData || doublesData.length === 0) {
+          console.error('Error fetching doubles standings:', doublesError);
           setDoublesStandings([]);
         } else {
-          setDoublesStandings(doublesData);
+          console.log('Doubles data:', doublesData);
+          // Get team members separately
+          const teamIds = doublesData?.map(node => node.team_id) || [];
+          console.log('Team IDs to fetch:', teamIds);
+          
+          // Use RPC call to get team members
+          const { data: teamMembersData, error: teamMembersError } = await supabase
+            .rpc('get_team_members', { team_ids: teamIds });
+
+          if (teamMembersError) {
+            console.error('Error fetching team members:', teamMembersError);
+            setDoublesStandings([]);
+            return;
+          }
+
+          console.log('Team members data:', teamMembersData);
+
+          // Transform the data to match the expected format
+          const transformedDoubles = (doublesData || []).map(node => {
+            const team = node.teams?.[0] || { name: 'Unknown Team' };
+            const teamMembers = teamMembersData?.filter((m: TeamMember) => m.team_id === node.team_id) || [];
+            const memberNames = teamMembers.map((member: TeamMember) => member.name || 'Unknown');
+
+            return {
+              team_id: node.team_id,
+              name: team.name,
+              members: memberNames,
+              wins: 0,
+              losses: 0,
+              position: node.position,
+              ladder_id: selectedLadder.ladder_id
+            };
+          });
+
+          console.log('Transformed doubles standings:', transformedDoubles);
+          setDoublesStandings(transformedDoubles);
         }
         
-        const { data: userTeamsData } = await supabase
+        // Fetch user's teams
+        const { data: userTeamsData, error: userTeamsError } = await supabase
           .from("team_members")
           .select("team_id")
-          .eq("user_id", userId);
-        setUserTeams(userTeamsData?.map((t: any) => t.team_id) || []);
+          .eq("user_id", userId)
+          .eq("vine_id", vineId);
+
+        if (userTeamsError) {
+          console.error('Error fetching user teams:', userTeamsError);
+          setUserTeams([]);
+        } else {
+          setUserTeams(userTeamsData?.map((t: any) => t.team_id) || []);
+        }
         
       } catch (e) {
+        console.error('Error in fetchStandings:', e);
         setSinglesStandings([]);
         setDoublesStandings([]);
         Alert.alert("Error", "Failed to fetch standings.");
@@ -370,6 +431,7 @@ export default function Home() {
         setLoading(false);
       }
     };
+
     if (selectedLadder.ladder_id !== 'none') {
       fetchStandings();
     } else {
@@ -490,70 +552,113 @@ export default function Home() {
 
   const handleCreateTeam = async ({ name, members }: { name: string; members: string[] }) => {
     try {
-      if (!vineId || !userId || !members[1]) {
+      console.log('Creating team with:', { name, members, vineId, userId, selectedLadder });
+
+      if (!vineId || !userId || !selectedLadder) {
+        console.log('Missing required info:', { vineId, userId, selectedLadder });
         Alert.alert("Error", "Missing information for team creation.");
         return;
       }
-      const partnerId = members[1];
+
+      // Create team
       const { data: teamData, error: teamError } = await supabase
         .from("teams")
-        .insert({ vine_id: vineId, name })
-        .select()
-        .single();
-      if (teamError) throw teamError;
-
-      await supabase
-        .from("team_members")
-        .insert([
-          { team_id: teamData.team_id, user_id: userId },
-          { team_id: teamData.team_id, user_id: partnerId },
-        ]);
-
-      const { data: nodeData } = await supabase
-        .from("ladder_nodes")
-        .insert({
-          vine_id: vineId,
-          position: (
-            await supabase
-              .from("ladder_nodes")
-              .select("position")
-              .eq("vine_id", vineId)
-              .order("position", { ascending: false })
-              .limit(1)
-              .single()
-          ).data?.position + 1 || 1,
+        .insert({ 
+          vine_id: vineId, 
+          name,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          status: 'active' // Ensure the team is created as active
         })
         .select()
         .single();
 
-      await supabase
+      if (teamError) {
+        console.error('Error creating team:', teamError);
+        throw teamError;
+      }
+
+      console.log('Team created:', teamData);
+
+      // Insert team members
+      const { error: membersError } = await supabase
+        .from("team_members")
+        .insert(
+          members.map(uid => ({ 
+            team_id: teamData.team_id, 
+            user_id: uid,
+            vine_id: vineId,
+            joined_at: new Date().toISOString()
+          }))
+        );
+      
+      if (membersError) {
+        console.error('Error adding team members:', membersError);
+        throw membersError;
+      }
+
+      console.log('Team members added successfully');
+
+      // Add team to ladder
+      const { error: ladderError } = await supabase
         .from("user_ladder_nodes")
         .insert({
-          node_id: nodeData.node_id,
           team_id: teamData.team_id,
+          ladder_id: selectedLadder.ladder_id,
           vine_id: vineId,
-          position: nodeData.position,
+          position: doublesStandings.length + 1
         });
 
-      const currentUserName = (await supabase.from("profiles").select("name").eq("user_id", userId).single()).data?.name || 'Unknown';
-      const partnerName = (await supabase.from("profiles").select("name").eq("user_id", partnerId).single()).data?.name || 'Unknown';
-      setDoublesStandings([
-        ...doublesStandings,
-        {
-          team_id: teamData.team_id,
-          name: teamData.name,
-          members: [currentUserName, partnerName],
-          wins: 0,
-          losses: 0,
-          position: nodeData.position,
-          ladder_id: selectedLadder?.ladder_id ?? '',
-        },
-      ]);
-      setUserTeams([...userTeams, teamData.team_id]);
+      if (ladderError) {
+        console.error('Error adding team to ladder:', ladderError);
+        throw ladderError;
+      }
+
+      console.log('Team added to ladder successfully');
+
+      // Get user names for display
+      const { data: userData, error: userError } = await supabase
+        .from("profiles")
+        .select("user_id, name")
+        .in("user_id", members);
+
+      if (userError) {
+        console.error('Error fetching user names:', userError);
+        throw userError;
+      }
+
+      const memberNames = userData?.map(u => u.name) || ['Unknown'];
+      console.log('Member names:', memberNames);
+
+      // Update local state
+      const newTeam = {
+        team_id: teamData.team_id,
+        name: teamData.name,
+        members: memberNames,
+        wins: 0,
+        losses: 0,
+        position: doublesStandings.length + 1,
+        ladder_id: selectedLadder.ladder_id,
+      };
+
+      console.log('Adding new team to standings:', newTeam);
+      setDoublesStandings(prev => [...prev, newTeam]);
+      setUserTeams(prev => [...prev, teamData.team_id]);
       setModalVisible(false);
+
+      // Show success message
+      Alert.alert(
+        "Success",
+        `Team "${name}" has been created successfully!`,
+        [{ text: "OK" }]
+      );
+
+      // Refresh standings
+      setLoading(true);
+      setSelectedLadder({ ...selectedLadder });
     } catch (e) {
-      // (error logging removed for production)'[DEBUG] Error creating team:', e);
-      Alert.alert("Error", "Failed to create team.");
+      console.error('Error creating team:', e);
+      Alert.alert("Error", "Failed to create team. Please try again.");
     }
   };
 
@@ -863,6 +968,7 @@ export default function Home() {
           onCreateTeam={({ name, members }) => handleCreateTeam({ name, members })}
           userRole={userProfile?.roles[0] || ''}
           userId={userId || ''}
+          vineId={vineId || ''}
         />
       </View>
     </BackgroundWrapper>
