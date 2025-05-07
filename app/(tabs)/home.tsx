@@ -1,31 +1,19 @@
 // app/(tabs)/home.tsx
 import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert } from "react-native";
-import { COLORS, TYPOGRAPHY } from "../../constants/theme";
-
-type ColorsType = typeof COLORS & {
-  primaryGradient: readonly string[];
-  secondary: string;
-  text: { dark: string };
-};
-const safeCOLORS: ColorsType = {
-  ...(COLORS || {}),
-  primaryGradient: COLORS.primaryGradient || ["#FFD54F", "#FFC107"],
-  secondary: COLORS.secondary || "#1A3C34",
-  text: COLORS.text || { dark: "#333" },
-};
-
-import { supabase } from "../../supabase";
 import { useRouter } from "expo-router";
+import { supabase } from "../../supabase";
 import { useAuth } from "../../context/AuthContext";
-import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import BackgroundWrapper from "../../components/BackgroundWrapper";
 import TeamCreationModal from "../../components/TeamCreationModal";
 import LadderSelector from "../../components/LadderSelector";
 import StandingsList from "../../components/StandingsList";
+import type { StandingsItem } from "../../components/StandingsList";
 
+// Constants
 const SEGMENTS = ["Singles", "Doubles"];
 
+// Types
 interface SinglesStanding {
   user_id: string;
   player_name: string;
@@ -46,52 +34,707 @@ interface DoublesStanding {
   ladder_id: string;
 }
 
-
-interface UserRoleResponse {
-  role: { name: string } | null;
-}
-
 interface Ladder {
   ladder_id: string;
   name: string;
   type: string;
 }
 
-import type { StandingsItem } from "../../components/StandingsList";
 type ChallengeTarget = StandingsItem | null;
 
-interface TeamMember {
-  team_id: string;
-  name: string;
+// Safe color access with fallbacks
+const COLORS = {
+  primaryGradient: ["#FFD54F", "#FFC107"],
+  secondary: "#1A3C34",
+  text: { dark: "#333" }
+};
+
+export default function Home() {
+  // State
+  const [challengeTarget, setChallengeTarget] = useState<ChallengeTarget>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [segment, setSegment] = useState("Singles");
+  const [singlesStandings, setSinglesStandings] = useState<SinglesStanding[]>([]);
+  const [doublesStandings, setDoublesStandings] = useState<DoublesStanding[]>([]);
+  const [vineId, setVineId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [userTeams, setUserTeams] = useState<string[]>([]);
+  const [userProfile, setUserProfile] = useState<{ roles: string[] }>({ roles: [] });
+  const [ladders, setLadders] = useState<Ladder[]>([]);
+  const [selectedLadder, setSelectedLadder] = useState<Ladder | null>(null);
+
+  // Hooks
+  const router = useRouter();
+  const { userId, loading: authLoading } = useAuth();
+
+  // Fetch user's vine and initialize data
+  useEffect(() => {
+    if (authLoading) return;
+    
+    if (!userId) {
+      router.replace("/login");
+      return;
+    }
+
+    const initialize = async () => {
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("vine_id")
+          .eq("user_id", userId)
+          .single();
+          
+        if (profileError || !profile?.vine_id) {
+          Alert.alert("Error", "You must join a vine first.");
+          setLoading(false);
+          return;
+        }
+        
+        setVineId(profile.vine_id);
+      } catch (e) {
+        Alert.alert("Error", "An unexpected error occurred.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initialize();
+  }, [userId, authLoading, router]);
+
+  // Fetch user roles
+  const fetchUserRoles = useCallback(async () => {
+    if (!userId || !vineId) {
+      setUserProfile({ roles: [] });
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role:roles(name)')
+        .eq('user_id', userId)
+        .eq('vine_id', vineId);
+        
+      if (error) {
+        setUserProfile({ roles: [] });
+        Alert.alert('Error', 'Failed to fetch user roles.');
+        return;
+      }
+      
+      const roles = (data || [])
+        .map((item: any) => item.role?.name)
+        .filter((name: string) => typeof name === 'string');
+        
+      setUserProfile({ roles });
+    } catch (e) {
+      setUserProfile({ roles: [] });
+      Alert.alert('Error', 'Failed to fetch user roles.');
+    }
+  }, [userId, vineId]);
+
+  // Fetch ladders for the user
+  const fetchLadders = useCallback(async () => {
+    if (!vineId || !userId) {
+      setLadders([]);
+      return;
+    }
+    
+    try {
+      // Get ladder IDs for this user
+      const { data: nodeData, error: nodeError } = await supabase
+        .from('user_ladder_nodes')
+        .select('ladder_id')
+        .eq('vine_id', vineId)
+        .eq('user_id', userId);
+      
+      if (nodeError || !nodeData || nodeData.length === 0) {
+        setLadders([]);
+        // Allow coordinators to proceed without ladders
+        if (userProfile?.roles.includes('coordinator')) {
+          setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
+        }
+        return;
+      }
+
+      // Get ladder details
+      const ladderIds = [...new Set(nodeData.map(node => node.ladder_id))]; // Deduplicate
+      const { data: ladderData, error: ladderError } = await supabase
+        .from('ladders')
+        .select('ladder_id, name, type')
+        .in('ladder_id', ladderIds);
+      
+      if (ladderError || !ladderData || ladderData.length === 0) {
+        setLadders([]);
+        if (userProfile?.roles.includes('coordinator')) {
+          setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
+        }
+        return;
+      }
+
+      setLadders(ladderData);
+      if (!selectedLadder && ladderData.length > 0) {
+        setSelectedLadder(ladderData[0]);
+      }
+    } catch (e) {
+      setLadders([]);
+      if (userProfile?.roles.includes('coordinator')) {
+        setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
+      }
+    }
+  }, [vineId, userId, userProfile, selectedLadder]);
+
+  // Fetch standings data
+  const fetchStandings = useCallback(async () => {
+    if (!selectedLadder || selectedLadder.ladder_id === 'none') {
+      setSinglesStandings([]);
+      setDoublesStandings([]);
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      // Fetch singles standings
+      const { data: singlesData, error: singlesError } = await supabase
+        .from('singles_standings')
+        .select('*')
+        .eq('ladder_id', selectedLadder.ladder_id)
+        .order('position', { ascending: true });
+        
+      if (!singlesError && singlesData) {
+        setSinglesStandings(singlesData);
+      } else {
+        setSinglesStandings([]);
+      }
+      
+      // Fetch doubles standings
+      const { data: doublesData, error: doublesError } = await supabase
+        .from('doubles_standings')
+        .select('*')
+        .eq('ladder_id', selectedLadder.ladder_id)
+        .order('position', { ascending: true });
+        
+      if (!doublesError && doublesData) {
+        setDoublesStandings(doublesData);
+      } else {
+        setDoublesStandings([]);
+      }
+    } catch (e) {
+      setSinglesStandings([]);
+      setDoublesStandings([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedLadder]);
+
+  // Initialize user roles and ladders when vineId is available
+  useEffect(() => {
+    if (vineId && userId) {
+      fetchUserRoles();
+      fetchLadders();
+    }
+  }, [vineId, userId, fetchUserRoles, fetchLadders]);
+
+  // Load standings when ladder is selected
+  useEffect(() => {
+    if (selectedLadder && selectedLadder.ladder_id !== 'none' && vineId && userId) {
+      fetchStandings();
+    } else {
+      setLoading(false);
+    }
+  }, [selectedLadder, vineId, userId, fetchStandings]);
+
+  // Create a new ladder (coordinator function)
+  const handleCreateLadder = async () => {
+    if (!vineId || !userId) {
+      Alert.alert("Error", "Missing vine or user information.");
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('ladders')
+        .insert({
+          vine_id: vineId,
+          name: `Ladder for ${userProfile?.roles.includes('coordinator') ? 'Coordinator' : 'User'}`,
+          type: 'singles',
+        })
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      await supabase
+        .from('user_ladder_nodes')
+        .insert({
+          user_id: userId,
+          ladder_id: data.ladder_id,
+          vine_id: vineId,
+          position: 1,
+        });
+        
+      setLadders([{ ladder_id: data.ladder_id, name: data.name, type: data.type }]);
+      setSelectedLadder({ ladder_id: data.ladder_id, name: data.name, type: data.type });
+      Alert.alert("Success", "Ladder created!");
+      
+    } catch (e) {
+      Alert.alert("Error", "Failed to create ladder.");
+    }
+  };
+
+  // Join an existing ladder
+  const handleJoinLadder = async () => {
+    if (!selectedLadder || !vineId) {
+      Alert.alert("Error", "No ladder or vine selected.");
+      return;
+    }
+    
+    if (selectedLadder.ladder_id === 'none') {
+      Alert.alert("Error", "Please create a ladder first.");
+      return;
+    }
+    
+    try {
+      if (segment === "Singles") {
+        const { error } = await supabase.from("user_ladder_nodes").insert({
+          user_id: userId,
+          ladder_id: selectedLadder.ladder_id,
+          position: singlesStandings.length + 1,
+          vine_id: vineId,
+        });
+        
+        if (error) throw error;
+        Alert.alert("Success", "You have joined the ladder!");
+        
+      } else {
+        if (!userTeams || userTeams.length === 0) {
+          Alert.alert("Error", "You must create a team first.");
+          return;
+        }
+        
+        const { error } = await supabase.from("user_ladder_nodes").insert({
+          team_id: userTeams[0],
+          ladder_id: selectedLadder.ladder_id,
+          position: doublesStandings.length + 1,
+          vine_id: vineId,
+        });
+        
+        if (error) throw error;
+        Alert.alert("Success", "Your team has joined the ladder!");
+      }
+      
+      setLoading(true);
+      fetchStandings();
+      
+    } catch (e) {
+      Alert.alert("Error", "Failed to join ladder.");
+    }
+  };
+
+  // Remove a player/team from ladder (coordinator function)
+  const handleRemoveFromLadder = async (item: any) => {
+    if (!selectedLadder || selectedLadder.ladder_id === 'none') return;
+    
+    const itemName = segment === "Singles" ? item.player_name : item.name;
+    
+    Alert.alert(
+      "Remove from Ladder",
+      `Are you sure you want to remove ${itemName} from this ladder?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              if (segment === "Singles" && "user_id" in item) {
+                await supabase
+                  .from("user_ladder_nodes")
+                  .delete()
+                  .eq("user_id", item.user_id)
+                  .eq("ladder_id", selectedLadder.ladder_id);
+              } else if (segment === "Doubles" && "team_id" in item) {
+                await supabase
+                  .from("user_ladder_nodes")
+                  .delete()
+                  .eq("team_id", item.team_id)
+                  .eq("ladder_id", selectedLadder.ladder_id);
+              }
+              
+              fetchStandings();
+              
+            } catch (e) {
+              Alert.alert("Error", "Failed to remove from ladder.");
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  // Create a new team for doubles play
+  const handleCreateTeam = async (team: { name: string; members: string[] }) => {
+    if (!team.name || team.name.trim() === '') {
+      Alert.alert('Error', 'Team name cannot be empty');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('Error', 'You must be logged in to create a team');
+        setLoading(false);
+        return;
+      }
+
+      // Insert into teams table
+      const { data: teamInsertData, error: teamInsertError } = await supabase
+        .from('teams')
+        .insert({
+          name: team.name,
+          vine_id: vineId,
+        })
+        .select()
+        .single();
+
+      if (teamInsertError || !teamInsertData) {
+        Alert.alert('Error', 'Failed to create team.');
+        setLoading(false);
+        return;
+      }
+
+      const newTeamId = teamInsertData.team_id;
+      
+      // Ensure the creator is included in the members
+      let allMembers = [...team.members];
+      if (!allMembers.includes(user.id)) {
+        allMembers.push(user.id);
+      }
+
+      // Insert all members into team_members
+      const memberRows = allMembers.map(user_id => ({
+        user_id,
+        team_id: newTeamId,
+        vine_id: vineId,
+      }));
+      
+      // Insert into team_members
+      const { error: membersError } = await supabase
+        .from('team_members')
+        .insert(memberRows);
+        
+      if (membersError) {
+        Alert.alert('Error', 'Failed to add team members.');
+        setLoading(false);
+        return;
+      }
+      
+      await fetchStandings();
+      setUserTeams([...userTeams, newTeamId]);
+      setModalVisible(false);
+      Alert.alert('Success', 'Team created successfully!');
+      
+    } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Create a challenge against another player/team
+  const handleCreateChallenge = async () => {
+    if (!challengeTarget) {
+      Alert.alert("Error", "No valid target selected");
+      return;
+    }
+    
+    try {
+      // Data structure would depend on your database schema
+      const { error } = await supabase
+        .from('challenges')
+        .insert({
+          challenger_id: userId,
+          challenger_type: segment === "Singles" ? "user" : "team",
+          target_id: 'user_id' in challengeTarget ? challengeTarget.user_id : challengeTarget.team_id,
+          target_type: segment === "Singles" ? "user" : "team",
+          ladder_id: selectedLadder?.ladder_id,
+          vine_id: vineId,
+          status: "pending"
+        });
+        
+      if (error) {
+        Alert.alert("Error", error.message);
+      } else {
+        Alert.alert("Success", "Challenge sent!");
+        setChallengeTarget(null);
+      }
+    } catch (e) {
+      Alert.alert("Error", "Failed to send challenge.");
+    }
+  };
+
+  // Loading state
+  if (!userId) return null;
+  
+  if (loading) {
+    return (
+      <BackgroundWrapper>
+        <View style={styles.loadingContainer}>
+          <Text>Loading...</Text>
+        </View>
+      </BackgroundWrapper>
+    );
+  }
+
+  // Error states
+  if (!vineId) {
+    return (
+      <BackgroundWrapper>
+        <View style={styles.messageContainer}>
+          <Text style={styles.messageText}>
+            Please join a vine to view standings.
+          </Text>
+        </View>
+      </BackgroundWrapper>
+    );
+  }
+
+  if (!userProfile?.roles || userProfile.roles.length === 0) {
+    return (
+      <BackgroundWrapper>
+        <View style={styles.messageContainer}>
+          <Text style={styles.messageText}>
+            No role assigned. Please contact your coordinator.
+          </Text>
+        </View>
+      </BackgroundWrapper>
+    );
+  }
+
+  if (!selectedLadder) {
+    return (
+      <BackgroundWrapper>
+        <View style={styles.messageContainer}>
+          <Text style={styles.messageText}>
+            No ladder selected. Please select or create a ladder.
+          </Text>
+          {userProfile.roles.includes('coordinator') && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleCreateLadder}
+            >
+              <Text style={styles.actionButtonText}>+ Create Ladder</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </BackgroundWrapper>
+    );
+  }
+
+  const noStandings =
+    (segment === "Singles" && singlesStandings.length === 0) ||
+    (segment === "Doubles" && doublesStandings.length === 0);
+
+  return (
+    <BackgroundWrapper>
+      <View style={styles.container}>
+        {/* Segmented control for Singles/Doubles */}
+        <View style={styles.segmentedControl}>
+          {SEGMENTS.map(s => (
+            <TouchableOpacity
+              key={s}
+              style={[styles.segment, segment === s && styles.segmentActive]}
+              onPress={() => setSegment(s)}
+            >
+              <Text style={[styles.segmentText, segment === s && styles.segmentTextActive]}>{s}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        
+        {/* Ladder selector */}
+        <LadderSelector
+          ladders={ladders}
+          selectedLadder={selectedLadder}
+          onSelectLadder={setSelectedLadder}
+        />
+
+        {/* Main content section */}
+        {noStandings ? (
+          <View style={styles.emptyStateContainer}>
+            <Text style={styles.emptyStateText}>
+              No {segment.toLowerCase()} standings found.
+            </Text>
+            
+            {userProfile.roles.includes('player') && (
+              <>
+                {segment === "Singles"
+                  ? !singlesStandings.some(p => p.user_id === userId) && (
+                      <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={handleJoinLadder}
+                        disabled={!selectedLadder || !vineId}
+                      >
+                        <Text style={styles.actionButtonText}>
+                          Join {segment} Ladder
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  : !doublesStandings.some(t => userTeams?.includes(t.team_id)) && (
+                      <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={handleJoinLadder}
+                        disabled={!selectedLadder || !vineId}
+                      >
+                        <Text style={styles.actionButtonText}>
+                          Join {segment} Ladder
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+              </>
+            )}
+            
+            {userProfile.roles.includes('coordinator') && (
+              <Text style={styles.coordinatorText}>
+                As a coordinator, you can manage ladders or invite players.
+              </Text>
+            )}
+          </View>
+        ) : (
+          <>
+            {/* Singles standings */}
+            {segment === "Singles" && singlesStandings.length > 0 && (
+              <StandingsList
+                data={singlesStandings.map(item => ({ ...item, name: item.player_name }))}
+                segment="Singles" 
+                onChallenge={setChallengeTarget} 
+                isCoordinator={userProfile.roles.includes('coordinator')} 
+                onRemove={item => handleRemoveFromLadder(item)}
+              />
+            )}
+            
+            {/* Doubles standings */}
+            {segment === "Doubles" && doublesStandings.length > 0 && (
+              <StandingsList
+                data={doublesStandings.map(item => ({ ...item, team_name: item.name }))}
+                segment="Doubles"
+                onChallenge={setChallengeTarget}
+                userTeams={userTeams}
+                isCoordinator={userProfile.roles.includes('coordinator')}
+                onRemove={item => handleRemoveFromLadder(item)}
+              />
+            )}
+          </>
+        )}
+        
+        {/* Create team button (for doubles) */}
+        {segment === "Doubles" && userProfile.roles.includes('player') && (
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => setModalVisible(true)}
+          >
+            <Text style={styles.actionButtonText}>+ Create Team</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Team creation modal */}
+        <TeamCreationModal
+          visible={modalVisible}
+          onClose={() => setModalVisible(false)}
+          onCreateTeam={({ name, members }) => handleCreateTeam({ name, members })}
+          userRole={userProfile.roles[0] || ''}
+          userId={userId || ''}
+          vineId={vineId || ''}
+        />
+        
+        {/* Challenge confirmation modal */}
+        {challengeTarget && (
+          <Modal
+            visible={!!challengeTarget}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setChallengeTarget(null)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>
+                  Challenge {challengeTarget && ('name' in challengeTarget ? challengeTarget.name : '')}?
+                </Text>
+                
+                {challengeTarget && 'user_id' in challengeTarget ? (
+                  <>
+                    <Text style={styles.modalText}>
+                      Rank: {challengeTarget.position}   Rating: {challengeTarget.rating}
+                    </Text>
+                    <Text style={styles.modalText}>
+                      W-L: {challengeTarget.wins}-{challengeTarget.losses}  
+                      Win%: {(challengeTarget.wins + challengeTarget.losses) > 0 
+                        ? Math.round((challengeTarget.wins / (challengeTarget.wins + challengeTarget.losses)) * 100) 
+                        : 0}%
+                    </Text>
+                  </>
+                ) : challengeTarget && 'team_id' in challengeTarget ? (
+                  <>
+                    <Text style={styles.modalText}>
+                      Members: {challengeTarget.members.join(", ")}
+                    </Text>
+                    <Text style={styles.modalText}>
+                      W-L: {challengeTarget.wins}-{challengeTarget.losses}  
+                      Win%: {(challengeTarget.wins + challengeTarget.losses) > 0 
+                        ? Math.round((challengeTarget.wins / (challengeTarget.wins + challengeTarget.losses)) * 100) 
+                        : 0}%
+                    </Text>
+                  </>
+                ) : null}
+                
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={styles.confirmButton}
+                    onPress={handleCreateChallenge}
+                  >
+                    <Text style={styles.confirmButtonText}>Send Challenge</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={() => setChallengeTarget(null)}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+        )}
+      </View>
+    </BackgroundWrapper>
+  );
 }
 
+// Styles
 const styles = StyleSheet.create({
-  challengeBtn: {
-    marginLeft: 'auto',
-    backgroundColor: safeCOLORS.primaryGradient[1],
-    borderRadius: 16,
-    padding: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  singlesCard: {
-    flexDirection: 'column',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 18,
-    marginVertical: 8,
-    elevation: 2,
-    width: '100%',
-    alignSelf: 'stretch',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    marginHorizontal: 0,
-  },
   container: {
     flex: 1,
     justifyContent: "flex-start",
     alignItems: "stretch",
     paddingTop: 40,
+  },
+  loadingContainer: {
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center'
+  },
+  messageContainer: {
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center'
+  },
+  messageText: {
+    color: '#888', 
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: 16
   },
   segmentedControl: {
     flexDirection: "row",
@@ -118,841 +761,80 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Bold",
     color: "#1A3C34",
   },
-  createTeamBtn: {
+  emptyStateContainer: {
+    padding: 24, 
+    alignItems: 'center'
+  },
+  emptyStateText: {
+    color: '#888', 
+    fontSize: 18, 
+    marginVertical: 16,
+    textAlign: 'center'
+  },
+  coordinatorText: {
+    color: '#888', 
+    fontSize: 16,
+    textAlign: 'center'
+  },
+  actionButton: {
     backgroundColor: "#FFD54F",
     borderRadius: 20,
     alignSelf: "center",
     paddingVertical: 10,
     paddingHorizontal: 28,
     marginTop: 10,
-    marginBottom: 4,
+    marginBottom: 20,
   },
-  createTeamBtnText: {
+  actionButtonText: {
     color: "#1A3C34",
     fontFamily: "Roboto-Bold",
     fontSize: 16,
   },
-  doublesCard: {
-    flexDirection: 'column',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 18,
-    marginVertical: 8,
-    elevation: 2,
-    width: '100%',
-    alignSelf: 'stretch',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    marginHorizontal: 0,
+  modalOverlay: {
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(0,0,0,0.4)'
   },
-  rank: {
-    fontSize: 18,
-    fontWeight: "bold",
-    width: 30,
-    textAlign: "center",
-    color: safeCOLORS.secondary,
+  modalContent: {
+    backgroundColor: '#fff', 
+    padding: 24, 
+    borderRadius: 12, 
+    minWidth: 280, 
+    alignItems: 'center'
   },
-  name: {
-    fontSize: 16,
-    flex: 1,
-    marginLeft: 12,
-    color: safeCOLORS.text.dark,
+  modalTitle: {
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    marginBottom: 8
   },
-  rating: {
-    fontSize: 15,
-    color: safeCOLORS.text.dark,
-    marginLeft: 12,
-    marginTop: 2,
+  modalText: {
+    fontSize: 15, 
+    marginBottom: 8
   },
+  modalButtons: {
+    flexDirection: 'row', 
+    marginTop: 16
+  },
+  confirmButton: {
+    paddingVertical: 8, 
+    paddingHorizontal: 18, 
+    backgroundColor: COLORS.primaryGradient[1], 
+    borderRadius: 8, 
+    marginRight: 8
+  },
+  confirmButtonText: {
+    color: '#fff', 
+    fontWeight: 'bold'
+  },
+  cancelButton: {
+    paddingVertical: 8, 
+    paddingHorizontal: 18, 
+    backgroundColor: '#eee', 
+    borderRadius: 8
+  },
+  cancelButtonText: {
+    color: COLORS.secondary, 
+    fontWeight: 'bold'
+  }
 });
-
-export default function Home() {
-  const [challengeTarget, setChallengeTarget] = useState<ChallengeTarget | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [segment, setSegment] = useState("Singles");
-  const [singlesStandings, setSinglesStandings] = useState<SinglesStanding[]>([]);
-  const [doublesStandings, setDoublesStandings] = useState<DoublesStanding[]>([]);
-  const [vineId, setVineId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [userTeams, setUserTeams] = useState<string[]>([]);
-  const router = useRouter();
-  const { userId, loading: authLoading } = useAuth();
-  const [userProfile, setUserProfile] = useState<{ roles: string[] }>({ roles: [] });
-  const [ladders, setLadders] = useState<Ladder[]>([]);
-  const [selectedLadder, setSelectedLadder] = useState<Ladder | null>(null);
-
-  const fetchLadders = useCallback(async () => {
-    
-    if (!vineId || !userId) {
-      
-      setLadders([]);
-      return;
-    }
-    try {
-      // Diagnostic query without user_id to test RLS
-      const { data: allNodes, error: allNodesError } = await supabase
-        .from('user_ladder_nodes')
-        .select('ladder_id, user_id, vine_id')
-        .eq('vine_id', vineId);
-      
-
-      // Main query with user_id
-      const { data: nodeData, error: nodeError } = await supabase
-        .from('user_ladder_nodes')
-        .select('ladder_id')
-        .eq('vine_id', vineId)
-        .eq('user_id', userId);
-      
-
-      if (nodeError) {
-        // (error logging removed for production)'[DEBUG] Error fetching ladder_ids from user_ladder_nodes:', nodeError);
-        setLadders([]);
-        return;
-      }
-      if (!nodeData || nodeData.length === 0) {
-        
-        setLadders([]);
-        // Allow coordinators to proceed without ladders
-        if (userProfile?.roles.includes('coordinator')) {
-          setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
-        }
-        return;
-      }
-
-      const ladderIds = [...new Set(nodeData.map((node: { ladder_id: string }) => node.ladder_id))]; // Deduplicate
-      const { data: ladderData, error: ladderError } = await supabase
-        .from('ladders')
-        .select('ladder_id, name, type')
-        .in('ladder_id', ladderIds);
-      
-
-      if (ladderError) {
-        // (error logging removed for production)'[DEBUG] Error fetching ladders:', ladderError);
-        setLadders([]);
-        return;
-      }
-      if (!ladderData || ladderData.length === 0) {
-        
-        setLadders([]);
-        if (userProfile?.roles.includes('coordinator')) {
-          setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
-        }
-        return;
-      }
-
-      setLadders(ladderData);
-      if (!selectedLadder && ladderData.length > 0) {
-        setSelectedLadder(ladderData[0]);
-        
-      }
-    } catch (e) {
-      // (error logging removed for production)'[DEBUG] Unexpected error in fetchLadders:', e);
-      setLadders([]);
-      if (userProfile?.roles.includes('coordinator')) {
-        setSelectedLadder({ ladder_id: 'none', name: 'No Ladder', type: 'none' });
-      }
-    }
-  }, [vineId, userId, userProfile, selectedLadder]);
-
-  const fetchUserRoles = useCallback(async () => {
-    if (!userId || !vineId) {
-      setUserProfile({ roles: [] });
-      return;
-    }
-    try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role:roles(name)')
-        .eq('user_id', userId)
-        .eq('vine_id', vineId);
-      if (error) {
-        setUserProfile({ roles: [] });
-        Alert.alert('Error', 'Failed to fetch user roles.');
-        return;
-      }
-      const roles = (data || [])
-        .map((item: any) => item.role?.name)
-        .filter((name: string) => typeof name === 'string');
-      setUserProfile({ roles });
-    } catch (e) {
-      setUserProfile({ roles: [] });
-      Alert.alert('Error', 'Failed to fetch user roles.');
-    }
-  }, [userId, vineId]);
-
-  useEffect(() => {
-    if (authLoading) {
-      
-      return;
-    }
-    if (!userId) {
-      
-      router.replace("/login");
-      return;
-    }
-
-    const initialize = async () => {
-      try {
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select("vine_id")
-          .eq("user_id", userId)
-          .single();
-        if (profileError || !profile?.vine_id) {
-          
-          Alert.alert("Error", "You must join a vine first.");
-          setLoading(false);
-          return;
-        }
-        setVineId(profile.vine_id);
-        
-      } catch (e) {
-        // (error logging removed for production)'[DEBUG] Unexpected error initializing:', e);
-        Alert.alert("Error", "An unexpected error occurred.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initialize();
-    
-  }, [userId, authLoading]);
-
-  useEffect(() => {
-    if (vineId && userId) {
-      fetchUserRoles();
-      fetchLadders();
-    }
-  }, [vineId, userId]);
-
-  useEffect(() => {
-    if (!selectedLadder || !vineId || !userId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const fetchStandings = async () => {
-      try {
-        console.log('Fetching standings for:', { selectedLadder, vineId, userId });
-        
-        // Fetch singles standings
-        const { data: singlesData, error: singlesError } = await supabase
-          .from("singles_standings")
-          .select("*")
-          .eq("ladder_id", selectedLadder.ladder_id)
-          .order("position", { ascending: true });
-
-        if (singlesError) {
-          console.error('Error fetching singles standings:', singlesError);
-          setSinglesStandings([]);
-        } else {
-          console.log('Singles standings:', singlesData);
-          setSinglesStandings(singlesData || []);
-        }
-
-        // Fetch doubles standings with team details
-        const { data: doublesData, error: doublesError } = await supabase
-          .from("user_ladder_nodes")
-          .select(`
-            team_id,
-            position,
-            teams!user_ladder_nodes_team_id_fkey (
-              team_id,
-              name
-            )
-          `)
-          .eq("ladder_id", selectedLadder.ladder_id)
-          .eq("vine_id", vineId)
-          .not("team_id", "is", null)
-          .order("position", { ascending: true });
-
-        if (doublesError) {
-          console.error('Error fetching doubles standings:', doublesError);
-          setDoublesStandings([]);
-        } else {
-          console.log('Doubles data:', doublesData);
-          // Get team members separately
-          const teamIds = doublesData?.map(node => node.team_id) || [];
-          console.log('Team IDs to fetch:', teamIds);
-          
-          // Use RPC call to get team members
-          const { data: teamMembersData, error: teamMembersError } = await supabase
-            .rpc('get_team_members', { team_ids: teamIds });
-
-          if (teamMembersError) {
-            console.error('Error fetching team members:', teamMembersError);
-            setDoublesStandings([]);
-            return;
-          }
-
-          console.log('Team members data:', teamMembersData);
-
-          // Transform the data to match the expected format
-          const transformedDoubles = (doublesData || []).map(node => {
-            const team = node.teams?.[0] || { name: 'Unknown Team' };
-            const teamMembers = teamMembersData?.filter((m: TeamMember) => m.team_id === node.team_id) || [];
-            const memberNames = teamMembers.map((member: TeamMember) => member.name || 'Unknown');
-
-            return {
-              team_id: node.team_id,
-              name: team.name,
-              members: memberNames,
-              wins: 0,
-              losses: 0,
-              position: node.position,
-              ladder_id: selectedLadder.ladder_id
-            };
-          });
-
-          console.log('Transformed doubles standings:', transformedDoubles);
-          setDoublesStandings(transformedDoubles);
-        }
-        
-        // Fetch user's teams
-        const { data: userTeamsData, error: userTeamsError } = await supabase
-          .from("team_members")
-          .select("team_id")
-          .eq("user_id", userId)
-          .eq("vine_id", vineId);
-
-        if (userTeamsError) {
-          console.error('Error fetching user teams:', userTeamsError);
-          setUserTeams([]);
-        } else {
-          setUserTeams(userTeamsData?.map((t: any) => t.team_id) || []);
-        }
-        
-      } catch (e) {
-        console.error('Error in fetchStandings:', e);
-        setSinglesStandings([]);
-        setDoublesStandings([]);
-        Alert.alert("Error", "Failed to fetch standings.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (selectedLadder.ladder_id !== 'none') {
-      fetchStandings();
-    } else {
-      setLoading(false);
-    }
-  }, [selectedLadder, vineId, userId]);
-
-  const handleCreateLadder = async () => {
-    if (!vineId || !userId) {
-      Alert.alert("Error", "Missing vine or user information.");
-      return;
-    }
-    try {
-      const { data, error } = await supabase
-        .from('ladders')
-        .insert({
-          vine_id: vineId,
-          name: `Ladder for ${userProfile?.roles.includes('coordinator') ? 'Coordinator' : 'User'}`,
-          type: 'singles',
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      await supabase
-        .from('user_ladder_nodes')
-        .insert({
-          user_id: userId,
-          ladder_id: data.ladder_id,
-          vine_id: vineId,
-          position: 1,
-        });
-      setLadders([{ ladder_id: data.ladder_id, name: data.name, type: data.type }]);
-      setSelectedLadder({ ladder_id: data.ladder_id, name: data.name, type: data.type });
-      Alert.alert("Success", "Ladder created!");
-    } catch (e) {
-      // (error logging removed for production)'[DEBUG] Error creating ladder:', e);
-      Alert.alert("Error", "Failed to create ladder.");
-    }
-  };
-
-  const handleJoinLadder = async () => {
-    if (!selectedLadder || !vineId) {
-      Alert.alert("Error", "No ladder or vine selected.");
-      return;
-    }
-    if (selectedLadder.ladder_id === 'none') {
-      Alert.alert("Error", "Please create a ladder first.");
-      return;
-    }
-    try {
-      if (segment === "Singles") {
-        const { error } = await supabase.from("user_ladder_nodes").insert({
-          user_id: userId,
-          ladder_id: selectedLadder.ladder_id,
-          position: singlesStandings.length + 1,
-          vine_id: vineId,
-        });
-        if (error) throw error;
-        Alert.alert("Success", "You have joined the ladder!");
-      } else {
-        if (!userTeams || userTeams.length === 0) {
-          Alert.alert("Error", "You must create a team first.");
-          return;
-        }
-        const { error } = await supabase.from("user_ladder_nodes").insert({
-          team_id: userTeams[0],
-          ladder_id: selectedLadder.ladder_id,
-          position: doublesStandings.length + 1,
-          vine_id: vineId,
-        });
-        if (error) throw error;
-        Alert.alert("Success", "Your team has joined the ladder!");
-      }
-      setLoading(true);
-      setSelectedLadder({ ...selectedLadder });
-    } catch (e) {
-      // (error logging removed for production)'[DEBUG] Error joining ladder:', e);
-      Alert.alert("Error", "Failed to join ladder.");
-    }
-  };
-
-  const handleRemoveFromLadder = async (item: any) => {
-    if (!selectedLadder || selectedLadder.ladder_id === 'none') return;
-    Alert.alert(
-      "Remove from Ladder",
-      `Are you sure you want to remove ${item.player_name} from this ladder?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              if (segment === "Singles" && "user_id" in item) {
-                await supabase
-                  .from("user_ladder_nodes")
-                  .delete()
-                  .eq("user_id", item.user_id)
-                  .eq("ladder_id", selectedLadder.ladder_id);
-              } else if (segment === "Doubles" && "team_id" in item) {
-                await supabase
-                  .from("user_ladder_nodes")
-                  .delete()
-                  .eq("team_id", item.team_id)
-                  .eq("ladder_id", selectedLadder.ladder_id);
-              }
-              setLoading(true);
-              setSelectedLadder({ ...selectedLadder });
-            } catch (e) {
-              // (error logging removed for production)'[DEBUG] Error removing from ladder:', e);
-              Alert.alert("Error", "Failed to remove from ladder.");
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleCreateTeam = async (team: { name: string; members: string[] }) => {
-    try {
-      // Set loading state to show feedback to user
-      setLoading(true);
-      console.log('[DEBUG] Creating team:', team);
-      
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.log('[DEBUG] No user found');
-        Alert.alert('Error', 'You must be logged in to create a team');
-        return;
-      }
-      
-      // Validate team name
-      if (!team.name || team.name.trim() === '') {
-        console.log('[DEBUG] Invalid team name');
-        Alert.alert('Error', 'Team name cannot be empty');
-        return;
-      }
-      
-      console.log('[DEBUG] Creating team with data:', {
-        name: team.name,
-        captain_id: user.id,
-        vine_id: vineId,
-        members: team.members
-      });
-      
-      // Create team with "active" status
-      const { data: newTeam, error: teamError } = await supabase
-        .from('teams')
-        .insert({
-          name: team.name,
-          captain_id: user.id,
-          vine_id: vineId,
-          status: 'active'
-        })
-        .select('team_id')
-        .single();
-      
-      if (teamError || !newTeam) {
-        console.error('[DEBUG] Error creating team:', teamError);
-        Alert.alert('Error', teamError?.message || 'Failed to create team');
-        return;
-      }
-      
-      console.log('[DEBUG] Team created successfully:', newTeam);
-      
-      // Add team members
-      const teamMembers = [
-        { user_id: user.id, team_id: newTeam.team_id, vine_id: vineId }, // Captain
-        ...team.members.map(memberId => ({
-          user_id: memberId,
-          team_id: newTeam.team_id,
-          vine_id: vineId
-        }))
-      ];
-      
-      console.log('[DEBUG] Adding team members:', teamMembers);
-      const { error: memberError } = await supabase
-        .from('team_members')
-        .insert(teamMembers);
-      
-      if (memberError) {
-        console.error('[DEBUG] Error adding team members:', memberError);
-        Alert.alert('Error', memberError.message || 'Failed to add team members');
-        
-        // Clean up - remove the team since members couldn't be added
-        await supabase.from('teams').delete().eq('team_id', newTeam.team_id);
-        return;
-      }
-      
-      // Update local state to include the new team
-      setUserTeams([...userTeams, newTeam.team_id]);
-      
-      // Close the modal
-      setModalVisible(false);
-      
-      // Success - team created and active
-      Alert.alert('Success', 'Team created successfully!');
-      
-      // Refresh the data to show the new team
-      if (selectedLadder) {
-        setSelectedLadder({ ...selectedLadder });
-      }
-      
-    } catch (error) {
-      console.error('[DEBUG] Error in handleCreateTeam:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleChallenge = async () => {
-  console.log('[DEBUG] handleChallenge called');
-  console.log('[DEBUG] challengeTarget:', challengeTarget);
-  console.log('[DEBUG] vineId:', vineId);
-  console.log('[DEBUG] userId:', userId);
-  try {
-    if (!challengeTarget || !vineId || !userId || !selectedLadder) {
-      console.log('[DEBUG] Missing challengeTarget, vineId, userId, or selectedLadder');
-      return;
-    }
-    if ("user_id" in challengeTarget) {
-      console.log('[DEBUG] Creating singles challenge', {
-        p_challenger_id: userId,
-        p_opponent_id: challengeTarget.user_id,
-        p_vine_id: vineId,
-        p_ladder_id: selectedLadder.ladder_id,
-      });
-      const { data, error } = await supabase.rpc("create_singles_challenge", {
-        p_challenger_id: userId,
-        p_opponent_id: challengeTarget.user_id,
-        p_vine_id: vineId,
-        p_ladder_id: selectedLadder.ladder_id,
-      });
-      console.log('[DEBUG] Singles challenge result:', { data, error });
-      if (error) {
-        console.log('[DEBUG] Error creating singles challenge:', error);
-        Alert.alert("Error", error.message);
-      } else {
-        Alert.alert("Success", "Challenge sent!");
-      }
-    } else {
-      console.log('[DEBUG] Creating doubles challenge');
-      if (!userTeams || userTeams.length === 0) {
-        console.log('[DEBUG] No userTeams found for doubles challenge');
-        Alert.alert("Error", "You must be part of a team to challenge in doubles.");
-        return;
-      }
-      console.log('[DEBUG] Doubles challenge params:', {
-        p_vine_id: vineId,
-        p_challenger_id: userId,
-        p_opponent_id: challengeTarget.user_id,
-        p_team_1_id: userTeams[0],
-        p_team_2_id: challengeTarget.team_id,
-        p_ladder_id: selectedLadder.ladder_id,
-      });
-      const { data, error } = await supabase.rpc("create_doubles_challenge", {
-        p_vine_id: vineId,
-        p_challenger_id: userId,
-        p_opponent_id: challengeTarget.user_id,
-        p_team_1_id: userTeams[0],
-        p_team_2_id: challengeTarget.team_id,
-        p_ladder_id: selectedLadder.ladder_id,
-      });
-      console.log('[DEBUG] Doubles challenge result:', { data, error });
-      if (error) {
-        console.log('[DEBUG] Error creating doubles challenge:', error);
-        Alert.alert("Error", error.message);
-      } else {
-        Alert.alert("Success", "Team challenge sent!");
-      }
-    }
-  } catch (e) {
-    console.log('[DEBUG] Unexpected error creating challenge:', e);
-    Alert.alert("Error", "Failed to send challenge.");
-  }
-};
-
-  
-  if (authLoading) {
-    return (
-      <BackgroundWrapper>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text>Authenticating...</Text>
-        </View>
-      </BackgroundWrapper>
-    );
-  }
-
-  if (!userId) {
-    return null; // Navigation handled in useEffect
-  }
-
-  if (loading) {
-    
-    return (
-      <BackgroundWrapper>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text>Loading...</Text>
-        </View>
-      </BackgroundWrapper>
-    );
-  }
-
-  if (!vineId) {
-    return (
-      <BackgroundWrapper>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ color: '#888', fontSize: 18 }}>
-            Please join a vine to view standings.
-          </Text>
-        </View>
-      </BackgroundWrapper>
-    );
-  }
-
-  if (!userProfile) {
-    return (
-      <BackgroundWrapper>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ color: '#888', fontSize: 18 }}>
-            Loading user profile...
-          </Text>
-        </View>
-      </BackgroundWrapper>
-    );
-  }
-
-  if (!userProfile.roles || userProfile.roles.length === 0) {
-    return (
-      <BackgroundWrapper>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ color: '#888', fontSize: 18 }}>
-            No role assigned. Please contact your coordinator.
-          </Text>
-        </View>
-      </BackgroundWrapper>
-    );
-  }
-
-  if (!selectedLadder) {
-    return (
-      <BackgroundWrapper>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ color: '#888', fontSize: 18 }}>
-            No ladder selected. Please select or create a ladder.
-          </Text>
-          {userProfile.roles.includes('coordinator') && (
-            <TouchableOpacity
-              style={styles.createTeamBtn}
-              onPress={handleCreateLadder}
-            >
-              <Text style={styles.createTeamBtnText}>+ Create Ladder</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </BackgroundWrapper>
-    );
-  }
-
-  const noStandings =
-    (segment === "Singles" && singlesStandings.length === 0) ||
-    (segment === "Doubles" && doublesStandings.length === 0);
-  
-
-  return (
-    <BackgroundWrapper>
-      <View style={styles.container}>
-        {noStandings && (
-          <View style={{ padding: 24, alignItems: 'center' }}>
-            <Text style={{ color: '#888', fontSize: 18, marginVertical: 16 }}>
-              No {segment.toLowerCase()} standings found.
-            </Text>
-            {userProfile?.roles.includes('player') && (
-              <>
-                {segment === "Singles"
-                  ? !singlesStandings.some(p => p.user_id === userId) && (
-                      <TouchableOpacity
-                        style={[styles.createTeamBtn, { marginBottom: 10 }]}
-                        onPress={handleJoinLadder}
-                        disabled={!selectedLadder || !vineId}
-                      >
-                        <Text style={styles.createTeamBtnText}>
-                          Join {segment} Ladder
-                        </Text>
-                      </TouchableOpacity>
-                    )
-                  : !doublesStandings.some(t => userTeams?.includes(t.team_id)) && (
-                      <TouchableOpacity
-                        style={[styles.createTeamBtn, { marginBottom: 10 }]}
-                        onPress={handleJoinLadder}
-                        disabled={!selectedLadder || !vineId}
-                      >
-                        <Text style={styles.createTeamBtnText}>
-                          Join {segment} Ladder
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-
-              </>
-            )}
-            {userProfile?.roles.includes('coordinator') && (
-              <Text style={{ color: '#888', fontSize: 16 }}>
-                As a coordinator, you can manage ladders or invite players.
-              </Text>
-            )}
-          </View>
-        )}
-        {challengeTarget && (
-          <Modal
-            visible={!!challengeTarget}
-            transparent
-            animationType="slide"
-            onRequestClose={() => setChallengeTarget(null)}
-          >
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)' }}>
-              <View style={{ backgroundColor: '#fff', padding: 24, borderRadius: 12, minWidth: 260, alignItems: 'center' }}>
-                <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 8 }}>
-                  Challenge {challengeTarget && ('name' in challengeTarget ? challengeTarget.name : '')}?
-                </Text>
-                {challengeTarget && 'user_id' in challengeTarget ? (
-                  <>
-                    <Text style={{ fontSize: 15, marginBottom: 4 }}>
-                      Rank: {challengeTarget.position}   Rating: {challengeTarget.rating}
-                    </Text>
-                    <Text style={{ fontSize: 15, marginBottom: 16 }}>
-                      W-L: {challengeTarget.wins}-{challengeTarget.losses}  Win%: {(challengeTarget.wins + challengeTarget.losses) > 0 ? Math.round((challengeTarget.wins / (challengeTarget.wins + challengeTarget.losses)) * 100) : 0}%
-                    </Text>
-                  </>
-                ) : challengeTarget && 'team_id' in challengeTarget ? (
-                  <>
-                    <Text style={{ fontSize: 15, marginBottom: 4 }}>
-                      Members: {challengeTarget.members.join(", ")}
-                    </Text>
-                    <Text style={{ fontSize: 15, marginBottom: 16 }}>
-                      W-L: {challengeTarget.wins}-{challengeTarget.losses}  Win%: {(challengeTarget.wins + challengeTarget.losses) > 0 ? Math.round((challengeTarget.wins / (challengeTarget.wins + challengeTarget.losses)) * 100) : 0}%
-                    </Text>
-                  </>
-                ) : null}
-                <View style={{ flexDirection: 'row' }}>
-                  <TouchableOpacity
-                    style={{ paddingVertical: 8, paddingHorizontal: 18, backgroundColor: safeCOLORS.primaryGradient[1], borderRadius: 8, marginRight: 8 }}
-                    onPress={handleChallenge}
-                  >
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Send Challenge</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={{ paddingVertical: 8, paddingHorizontal: 18, backgroundColor: '#eee', borderRadius: 8 }}
-                    onPress={() => setChallengeTarget(null)}
-                  >
-                    <Text style={{ color: safeCOLORS.secondary, fontWeight: 'bold' }}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </Modal>
-        )}
-        <View style={styles.segmentedControl}>
-          {SEGMENTS.map(s => (
-            <TouchableOpacity
-              key={s}
-              style={[styles.segment, segment === s && styles.segmentActive]}
-              onPress={() => setSegment(s)}
-            >
-              <Text style={[styles.segmentText, segment === s && styles.segmentTextActive]}>{s}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <LadderSelector
-          ladders={ladders}
-          selectedLadder={selectedLadder}
-          onSelectLadder={setSelectedLadder}
-        />
-
-        {segment === "Singles" ? (
-          singlesStandings.length > 0 ? (
-            <StandingsList
-              data={singlesStandings.map(item => ({ ...item, name: item.player_name }))}
-              segment="Singles" onChallenge={setChallengeTarget} isCoordinator={userProfile?.roles.includes('coordinator')} onRemove={item => handleRemoveFromLadder(item)}
-            />
-          ) : (
-            <Text style={{ color: '#888', textAlign: 'center', marginVertical: 16 }}>
-              No singles standings available.
-            </Text>
-          )
-        ) : (
-          <>
-            {doublesStandings.length > 0 ? (
-              <StandingsList
-                data={doublesStandings.map(item => ({ ...item, team_name: item.name }))}
-                segment="Doubles"
-                onChallenge={setChallengeTarget}
-                userTeams={userTeams}
-                isCoordinator={userProfile?.roles.includes('coordinator')}
-                onRemove={item => handleRemoveFromLadder(item)}
-              />
-            ) : (
-              <Text style={{ color: '#888', textAlign: 'center', marginVertical: 16 }}>
-                No doubles standings available.
-              </Text>
-            )}
-            {userProfile?.roles.includes('player') && (
-              <TouchableOpacity
-                style={styles.createTeamBtn}
-                onPress={() => setModalVisible(true)}
-              >
-                <Text style={styles.createTeamBtnText}>+ Create Team</Text>
-              </TouchableOpacity>
-            )}
-          </>
-        )}
-        <TeamCreationModal
-          visible={modalVisible}
-          onClose={() => setModalVisible(false)}
-          onCreateTeam={({ name, members }) => handleCreateTeam({ name, members })}
-          userRole={userProfile?.roles[0] || ''}
-          userId={userId || ''}
-          vineId={vineId || ''}
-        />
-      </View>
-    </BackgroundWrapper>
-  );
-}

@@ -23,6 +23,12 @@ const TeamCreationModal: React.FC<TeamCreationModalProps> = ({
   userId,
   vineId,
 }) => {
+  useEffect(() => {
+    if (visible) {
+      console.log('[TeamCreationModal] Modal opened', { userId, vineId, userRole });
+    }
+  }, [visible, userId, vineId, userRole]);
+
   const [teamName, setTeamName] = useState('');
   const [teammates, setTeammates] = useState<{ id?: string; user_id?: string; name?: string; email?: string; invited?: boolean }[]>([]);
   const [search, setSearch] = useState('');
@@ -132,6 +138,7 @@ const TeamCreationModal: React.FC<TeamCreationModalProps> = ({
       });
 
       // Call the parent's onCreateTeam function - team will be created with "active" status directly
+      console.log('[TeamCreationModal] Calling onCreateTeam', { name: teamName, members: teammates.map(t => t.id || t.user_id || '') });
       await onCreateTeam({
         name: teamName,
         members: teammates.map(t => t.id || t.user_id || '')
@@ -207,7 +214,7 @@ const TeamCreationModal: React.FC<TeamCreationModalProps> = ({
     );
   };
 
-  if (userRole !== 'player') return null;
+  if (userRole !== 'player' && userRole !== 'coordinator') return null;
 
   return (
     <Modal

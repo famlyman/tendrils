@@ -12,6 +12,7 @@ import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import * as ImagePicker from "expo-image-picker";
 
 import { useRouter } from "expo-router";
+import TeamEditModal from '../../components/TeamEditModal';
 
 export default function Profile() {
 
@@ -28,6 +29,69 @@ export default function Profile() {
   const [showEditCard, setShowEditCard] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(false);
+
+  // --- Team state ---
+  const [teams, setTeams] = useState<any[]>([]); // Array of user's teams
+  const [teamMembers, setTeamMembers] = useState<{ [teamId: string]: any[] }>({}); // Map: teamId -> members
+  // Team edit modal state
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editTeamId, setEditTeamId] = useState<string | null>(null);
+  const [editTeamName, setEditTeamName] = useState<string>('');
+  const [editTeamMembers, setEditTeamMembers] = useState<{ user_id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    const fetchTeams = async () => {
+      if (!session || !session.user) return;
+      // Get user's teams
+      const { data: userTeams, error: userTeamsError } = await supabase
+        .from('team_members')
+        .select('team_id, teams!fk_team_members_team_id(name)')
+        .eq('user_id', session.user.id);
+      console.log('userTeams:', userTeams);
+      if (userTeamsError) {
+        console.log('userTeamsError:', userTeamsError);
+        Alert.alert('Teams Query Error', userTeamsError.message || 'Unknown error');
+      }
+      if (!userTeams || userTeams.length === 0) {
+        Alert.alert('No Teams Found', 'You are not a member of any teams or there was an issue fetching teams.');
+      }
+      const uniqueTeams = Array.from(
+        new Map((userTeams || []).map((t: any) => [t.team_id, t.teams])).entries()
+      ).map(([team_id, team]) => ({ team_id, ...team }));
+      setTeams(uniqueTeams);
+      // For each team, fetch members
+      const membersByTeam: { [teamId: string]: any[] } = {};
+      for (const t of uniqueTeams) {
+        const { data: members, error: membersError } = await supabase
+          .from('team_members')
+          .select('user_id, profiles(name)')
+          .eq('team_id', t.team_id);
+        if (membersError) {
+          console.log(`membersError for team ${t.team_id}:`, membersError);
+        }
+        if (members) {
+          membersByTeam[t.team_id] = members.map((m: any) => ({
+            user_id: m.user_id,
+            name: m.profiles?.name || 'Unknown',
+          }));
+        }
+      }
+      setTeamMembers(membersByTeam);
+      console.log('teams state:', uniqueTeams);
+      console.log('teamMembers state:', membersByTeam);
+    };
+    if (session && session.user) fetchTeams();
+  }, [session]);
+
+  // Handler for edit team button
+  const handleEditTeam = (teamId: string) => {
+    const team = teams.find(t => t.team_id === teamId);
+    const members = teamMembers[teamId] || [];
+    setEditTeamId(teamId);
+    setEditTeamName(team?.name || '');
+    setEditTeamMembers(members);
+    setEditModalVisible(true);
+  };
 
   // Fetch session on mount and listen for auth state changes
   useEffect(() => {
@@ -386,6 +450,31 @@ if (userRoleData && userRoleData.length > 0) {
           {rating !== null && <Text style={styles.label}>Rating: {rating}</Text>}
           {bio && <Text style={styles.label}>Bio: {bio}</Text>}
           {/* <Text style={styles.label}>Roles: {roles.join(", ") || "None"}</Text> */}
+          {/* --- Teams Section --- */}
+          {teams.length > 0 && (
+            <View style={{ marginTop: 24, width: '100%' }}>
+              <Text style={[styles.label, { fontWeight: 'bold', fontSize: 18 }]}>Teams</Text>
+              {teams.map((team) => (
+                <View key={team.team_id} style={{ marginVertical: 8, padding: 10, backgroundColor: '#f3f3f3', borderRadius: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={[styles.label, { fontSize: 16 }]}>{team.name || 'Unnamed Team'}</Text>
+                    <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }} onPress={() => handleEditTeam(team.team_id)}>
+                      <MaterialIcons name="edit" size={20} color="#1A3C34" />
+                      <Text style={{ color: '#1A3C34', marginLeft: 4 }}>Edit Team</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {teamMembers[team.team_id] && (
+                    <View style={{ marginTop: 4, marginLeft: 10 }}>
+                      <Text style={{ color: '#888', fontSize: 14 }}>Members:</Text>
+                      {teamMembers[team.team_id].map((member) => (
+                        <Text key={member.user_id} style={{ color: '#333', fontSize: 14, marginLeft: 8 }}>- {member.name}</Text>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
           {/* <Text style={styles.label}>Team: {teamInfo}</Text> */}
           {roles.includes("Coordinator") && joinCode && (
             <Text style={styles.label}>Join Code: {joinCode} (Share this with players!)</Text>
@@ -518,6 +607,48 @@ if (userRoleData && userRoleData.length > 0) {
 
         </Animatable.View>
       </ScrollView>
+      {/* Team Edit Modal */}
+      <TeamEditModal
+        visible={editModalVisible}
+        onClose={() => setEditModalVisible(false)}
+        teamId={editTeamId || ''}
+        initialName={editTeamName}
+        initialMembers={editTeamMembers}
+        onUpdated={() => {
+          // Refresh teams after update
+          if (session && session.user) {
+            // Re-run fetchTeams logic
+            (async () => {
+              const { data: userTeams } = await supabase
+                .from('team_members')
+                .select('team_id, teams!fk_team_members_team_id(name)')
+                .eq('user_id', session.user.id);
+              const uniqueTeams = Array.from(
+                new Map((userTeams || []).map((t: any) => [t.team_id, t.teams])).entries()
+              ).map(([team_id, team]) => ({ team_id, ...team }));
+              setTeams(uniqueTeams);
+              // For each team, fetch members
+              const membersByTeam: { [teamId: string]: any[] } = {};
+              for (const t of uniqueTeams) {
+                // Use left join so all team_members are returned even if profile is missing
+                const { data: members, error: fetchMembersErr } = await supabase
+                  .from('team_members')
+                  .select('user_id, profiles(name)')
+                  .eq('team_id', t.team_id);
+                console.log('DEBUG: team_id', t.team_id, 'members', members, 'error', fetchMembersErr);
+                if (members) {
+                  // Always include the member, fallback to user_id if no profile
+                  membersByTeam[t.team_id] = members.map((m: any) => ({
+                    user_id: m.user_id,
+                    name: m.profiles?.name || m.user_id || 'Unknown',
+                  }));
+                }
+              }
+              setTeamMembers(membersByTeam);
+            })();
+          }
+        }}
+      />
     </LinearGradient>
   );
 }
