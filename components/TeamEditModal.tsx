@@ -56,14 +56,28 @@ const TeamEditModal: React.FC<TeamEditModalProps> = ({ visible, onClose, teamId,
       Alert.alert('Debug', `Team vine_id is null for teamId: ${teamId}`);
       return;
     }
-    // Streamlined logic:
-    // 1. Insert into team_members for this user/team
-    const { error: insertMemberErr, data: insertMemberData } = await supabase
+    // Robust duplicate check using count and row debug:
+    const { count, data: memberRows, error: memberFetchErr } = await supabase
       .from('team_members')
-      .insert({ team_id: teamId, user_id: user.user_id });
-    console.log('DEBUG: insert team_member', { insertMemberErr, insertMemberData });
-    if (insertMemberErr) {
-      Alert.alert('Debug', `Failed to add member to team: ${insertMemberErr.message}`);
+      .select('*', { count: 'exact' })
+      .eq('team_id', teamId)
+      .eq('user_id', user.user_id);
+    console.log('DEBUG: member count', count, 'memberRows', memberRows, 'memberFetchErr', memberFetchErr);
+    Alert.alert('DEBUG', `member count: ${count}, rows: ${JSON.stringify(memberRows)}, error: ${memberFetchErr ? memberFetchErr.message : 'none'}`);
+
+    if (count === 0) {
+      // Insert only if not already a member
+      console.log('DEBUG: About to insert team_member', { team_id: teamId, user_id: user.user_id });
+      const { error: insertMemberErr, data: insertMemberData } = await supabase
+        .from('team_members')
+        .insert({ team_id: teamId, user_id: user.user_id });
+      console.log('DEBUG: insert team_member', { insertMemberErr, insertMemberData });
+      if (insertMemberErr) {
+        Alert.alert('Debug', `Failed to add member to team: ${insertMemberErr.message}`);
+      }
+    } else {
+      console.log('DEBUG: user already a member of team');
+      Alert.alert('Debug', 'User is already a member of this team.');
     }
 
     // 2. Update vine_id in profiles for this user (profile must exist for all users)
