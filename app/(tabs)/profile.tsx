@@ -442,48 +442,46 @@ if (userRoleData && userRoleData.length > 0) {
             </View>
           )}
           <Text style={styles.title}>Profile</Text>
-
-
           <Text style={styles.label}>Name: {name}</Text>
-          {phone && <Text style={styles.label}>Phone: {phone}</Text>}
-          <Text style={styles.label}>Email: {session.user.email}</Text>
-          {rating !== null && <Text style={styles.label}>Rating: {rating}</Text>}
-          {bio && <Text style={styles.label}>Bio: {bio}</Text>}
-          {/* <Text style={styles.label}>Roles: {roles.join(", ") || "None"}</Text> */}
-          {/* --- Teams Section --- */}
-          {teams.length > 0 && (
-            <View style={{ marginTop: 24, width: '100%' }}>
-              <Text style={[styles.label, { fontWeight: 'bold', fontSize: 18 }]}>Teams</Text>
-              {teams.map((team) => (
-                <View key={team.team_id} style={{ marginVertical: 8, padding: 10, backgroundColor: '#f3f3f3', borderRadius: 10 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text style={[styles.label, { fontSize: 16 }]}>{team.name || 'Unnamed Team'}</Text>
-                    <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }} onPress={() => handleEditTeam(team.team_id)}>
-                      <MaterialIcons name="edit" size={20} color="#1A3C34" />
-                      <Text style={{ color: '#1A3C34', marginLeft: 4 }}>Edit Team</Text>
-                    </TouchableOpacity>
-                  </View>
-                  {teamMembers[team.team_id] && (
-                    <View style={{ marginTop: 4, marginLeft: 10 }}>
-                      <Text style={{ color: '#888', fontSize: 14 }}>Members:</Text>
-                      {teamMembers[team.team_id].map((member) => (
-                        <Text key={member.user_id} style={{ color: '#333', fontSize: 14, marginLeft: 8 }}>- {member.name}</Text>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              ))}
-            </View>
-          )}
-          {/* <Text style={styles.label}>Team: {teamInfo}</Text> */}
-          {roles.includes("Coordinator") && joinCode && (
-            <Text style={styles.label}>Join Code: {joinCode} (Share this with players!)</Text>
-          )}
-          <TouchableOpacity style={styles.editButton} onPress={toggleEditCard}>
-            <MaterialIcons name="edit" size={24} color="#1A3C34" style={styles.editIcon} />
-            <Text style={styles.editButtonText}>Edit Profile</Text>
+{phone ? <Text style={styles.label}>Phone: {phone}</Text> : null}
+<Text style={styles.label}>Email: {session.user.email}</Text>
+{rating !== null ? <Text style={styles.label}>Rating: {rating}</Text> : null}
+{bio ? <Text style={styles.label}>Bio: {bio}</Text> : null}
+{/* <Text style={styles.label}>Roles: {roles.join(", ") || "None"}</Text> */}
+{/* --- Teams Section --- */}
+{teams.length > 0 ? (
+  <View style={{ marginTop: 24, width: '100%' }}>
+    <Text style={[styles.label, { fontWeight: 'bold', fontSize: 18 }]}>Teams</Text>
+    {teams.map((team) => (
+      <View key={team.team_id} style={{ marginVertical: 8, padding: 10, backgroundColor: '#f3f3f3', borderRadius: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Text style={[styles.label, { fontSize: 16 }]}>{team.name || 'Unnamed Team'}</Text>
+          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center' }} onPress={() => handleEditTeam(team.team_id)}>
+            <MaterialIcons name="edit" size={20} color="#1A3C34" />
+            <Text style={{ color: '#1A3C34', marginLeft: 4 }}>Edit Team</Text>
           </TouchableOpacity>
-          {showEditCard && (
+        </View>
+        {teamMembers[team.team_id] ? (
+          <View style={{ marginTop: 4, marginLeft: 10 }}>
+            <Text style={{ color: '#888', fontSize: 14 }}>Members:</Text>
+            {teamMembers[team.team_id].map((member) => (
+              <Text key={member.user_id} style={{ color: '#333', fontSize: 14, marginLeft: 8 }}>- {member.name}</Text>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    ))}
+  </View>
+) : null}
+{/* <Text style={styles.label}>Team: {teamInfo}</Text> */}
+{roles.includes("Coordinator") && joinCode ? (
+  <Text style={styles.label}>Join Code: {joinCode} (Share this with players!)</Text>
+) : null}
+<TouchableOpacity style={styles.editButton} onPress={toggleEditCard}>
+  <MaterialIcons name="edit" size={24} color="#1A3C34" style={styles.editIcon} />
+  <Text style={styles.editButtonText}>Edit Profile</Text>
+</TouchableOpacity>
+{showEditCard && (
             <Animatable.View animation="fadeIn" duration={500} style={styles.card}>
               <Text style={styles.cardTitle}>Edit Profile</Text>
               <Text style={styles.cardLabel}>Profile Picture:</Text>
