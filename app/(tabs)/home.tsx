@@ -1,6 +1,6 @@
 // app/(tabs)/home.tsx
 import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert, ViewStyle, TextStyle } from "react-native";
 import { useRouter } from "expo-router";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../context/AuthContext";
@@ -27,6 +27,7 @@ interface SinglesStanding {
 interface DoublesStanding {
   team_id: string;
   name: string;
+  team_name: string;
   members: string[];
   wins: number;
   losses: number;
@@ -38,6 +39,32 @@ interface Ladder {
   ladder_id: string;
   name: string;
   type: string;
+}
+
+interface TeamMember {
+  team_id: string;
+  user_id: string;
+  vine_id: string;
+}
+
+interface TeamData {
+  team_id: string;
+  teams?: {
+    name?: string;
+    team_id?: string;
+    team_members?: { user_id: string }[];
+  };
+}
+
+interface Team {
+  team_id: string;
+  name: string;
+  vine_id: string;
+  team_members?: { user_id: string }[];
+}
+
+interface TeamMemberWithTeam extends TeamMember {
+  teams?: Team;
 }
 
 type ChallengeTarget = StandingsItem | null;
@@ -59,6 +86,7 @@ export default function Home() {
   const [vineId, setVineId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [userTeams, setUserTeams] = useState<string[]>([]);
+  const [userTeamDetails, setUserTeamDetails] = useState<Array<{team_id: string, name: string, members: string[]}>>([]);
   const [userProfile, setUserProfile] = useState<{ roles: string[] }>({ roles: [] });
   const [ladders, setLadders] = useState<Ladder[]>([]);
   const [selectedLadder, setSelectedLadder] = useState<Ladder | null>(null);
@@ -91,6 +119,7 @@ export default function Home() {
         }
         
         setVineId(profile.vine_id);
+        await fetchUserData(); // Call the new combined fetch function
       } catch (e) {
         Alert.alert("Error", "An unexpected error occurred.");
       } finally {
@@ -101,34 +130,73 @@ export default function Home() {
     initialize();
   }, [userId, authLoading, router]);
 
-  // Fetch user roles
-  const fetchUserRoles = useCallback(async () => {
+  // Fetch user roles and teams
+  const fetchUserData = useCallback(async () => {
     if (!userId || !vineId) {
       setUserProfile({ roles: [] });
+      setUserTeams([]);
+      setUserTeamDetails([]);
       return;
     }
     
     try {
-      const { data, error } = await supabase
+      // Fetch user roles
+      const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
         .select('role:roles(name)')
         .eq('user_id', userId)
         .eq('vine_id', vineId);
         
-      if (error) {
+      if (rolesError) {
         setUserProfile({ roles: [] });
         Alert.alert('Error', 'Failed to fetch user roles.');
-        return;
+      } else {
+        const roles = (rolesData || [])
+          .map(item => {
+            const roleItem = item as { role?: { name?: string } };
+            return roleItem.role?.name;
+          })
+          .filter((name): name is string => typeof name === 'string');
+        setUserProfile({ roles });
       }
-      
-      const roles = (data || [])
-        .map((item: any) => item.role?.name)
-        .filter((name: string) => typeof name === 'string');
-        
-      setUserProfile({ roles });
+
+      // Fetch user teams with details
+      const { data: teamsData, error: teamsError } = await supabase
+        .from('team_members')
+        .select('team_id, teams!fk_team_members_team_id(name, team_id, team_members!fk_team_members_team_id(user_id))')
+        .eq('user_id', userId)
+        .eq('vine_id', vineId);
+
+      if (teamsError) {
+        console.error('Failed to fetch user teams:', teamsError);
+        setUserTeams([]);
+        setUserTeamDetails([]);
+      } else {
+        const teamDetails = (teamsData as TeamData[] || []).reduce((acc, item) => {
+        // Type guard to ensure we only process valid team member entries
+        if (item.team_id && item.teams) {
+          const teamMembers = item.teams.team_members?.map((m: { user_id: string }) => m.user_id) || [];
+          const teamDetail = {
+            team_id: item.team_id,
+            name: item.teams.name || 'Unnamed Team',
+            members: teamMembers,
+            wins: 0,  // Default wins
+            losses: 0  // Default losses
+          };
+          acc.push(teamDetail);
+        }
+        return acc;
+      }, [] as Array<{team_id: string, name: string, members: string[], wins: number, losses: number}>);
+
+      setUserTeams(teamDetails.map(team => team.team_id));
+      setUserTeamDetails(teamDetails);
+      }
     } catch (e) {
+      console.error('Unexpected error:', e);
       setUserProfile({ roles: [] });
-      Alert.alert('Error', 'Failed to fetch user roles.');
+      setUserTeams([]);
+      setUserTeamDetails([]);
+      Alert.alert('Error', 'An unexpected error occurred.');
     }
   }, [userId, vineId]);
 
@@ -210,14 +278,19 @@ export default function Home() {
       // Fetch doubles standings
       const { data: doublesData, error: doublesError } = await supabase
         .from('doubles_standings')
-        .select('*')
-        .eq('ladder_id', selectedLadder.ladder_id)
-        .order('position', { ascending: true });
-        
-      if (!doublesError && doublesData) {
-        setDoublesStandings(doublesData);
-      } else {
+        .select('*, teams(name)')
+        .eq('ladder_id', selectedLadder.ladder_id);
+      
+      if (doublesError) {
+        Alert.alert('Error', 'Failed to fetch doubles standings');
         setDoublesStandings([]);
+      } else {
+        // Ensure team_name is populated
+        const formattedDoublesData = (doublesData || []).map(item => ({
+          ...item,
+          team_name: item.teams?.name || item.name || 'Unnamed Team'
+        }));
+        setDoublesStandings(formattedDoublesData);
       }
     } catch (e) {
       setSinglesStandings([]);
@@ -230,10 +303,10 @@ export default function Home() {
   // Initialize user roles and ladders when vineId is available
   useEffect(() => {
     if (vineId && userId) {
-      fetchUserRoles();
+      fetchUserData();
       fetchLadders();
     }
-  }, [vineId, userId, fetchUserRoles, fetchLadders]);
+  }, [vineId, userId, fetchUserData, fetchLadders]);
 
   // Load standings when ladder is selected
   useEffect(() => {
@@ -543,121 +616,67 @@ export default function Home() {
       <View style={styles.container}>
         {/* Segmented control for Singles/Doubles */}
         <View style={styles.segmentedControl}>
-          {SEGMENTS.map(s => (
+          {SEGMENTS.map((s) => (
             <TouchableOpacity
               key={s}
-              style={[styles.segment, segment === s && styles.segmentActive]}
+              style={[
+                styles.segmentButton,
+                segment === s && { backgroundColor: COLORS.primaryGradient[0] },
+              ]}
               onPress={() => setSegment(s)}
             >
-              <Text style={[styles.segmentText, segment === s && styles.segmentTextActive]}>{s}</Text>
+              <Text
+                style={[
+                  styles.segmentButtonText,
+                  segment === s && { color: COLORS.secondary },
+                ]}
+              >
+                {s}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
-        
-        {/* Ladder selector */}
+
+        {/* Ladder Selector */}
         <LadderSelector
           ladders={ladders}
           selectedLadder={selectedLadder}
           onSelectLadder={setSelectedLadder}
         />
 
-        {/* Main content section */}
-        {noStandings ? (
-          <View style={styles.emptyStateContainer}>
-            <Text style={styles.emptyStateText}>
-              No {segment.toLowerCase()} standings found.
-            </Text>
-            
-            {userProfile.roles.includes('player') && (
-              <>
-                {segment === "Singles"
-                  ? !singlesStandings.some(p => p.user_id === userId) && (
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={handleJoinLadder}
-                        disabled={!selectedLadder || !vineId}
-                      >
-                        <Text style={styles.actionButtonText}>
-                          Join {segment} Ladder
-                        </Text>
-                      </TouchableOpacity>
-                    )
-                  : !doublesStandings.some(t => userTeams?.includes(t.team_id)) && (
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={handleJoinLadder}
-                        disabled={!selectedLadder || !vineId}
-                      >
-                        <Text style={styles.actionButtonText}>
-                          Join {segment} Ladder
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-              </>
-            )}
-            
-            {userProfile.roles.includes('coordinator') && (
-              <Text style={styles.coordinatorText}>
-                As a coordinator, you can manage ladders or invite players.
-              </Text>
-            )}
-          </View>
-        ) : (
-          <>
-            {/* Singles standings */}
-            {segment === "Singles" && singlesStandings.length > 0 && (
-              <StandingsList
-                data={singlesStandings.map(item => ({ ...item, name: item.player_name }))}
-                segment="Singles" 
-                onChallenge={setChallengeTarget} 
-                isCoordinator={userProfile.roles.includes('coordinator')} 
-                onRemove={item => handleRemoveFromLadder(item)}
-              />
-            )}
-            
-            {/* Doubles standings */}
-            {segment === "Doubles" && doublesStandings.length > 0 && (
-              <StandingsList
-                data={doublesStandings.map(item => ({ ...item, team_name: item.name }))}
-                segment="Doubles"
-                onChallenge={setChallengeTarget}
-                userTeams={userTeams}
-                isCoordinator={userProfile.roles.includes('coordinator')}
-                onRemove={item => handleRemoveFromLadder(item)}
-              />
-            )}
-          </>
-        )}
-        
-        {/* Create team button (for doubles) */}
-        {segment === "Doubles" && userProfile.roles.includes('player') && (
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => setModalVisible(true)}
-          >
-            <Text style={styles.actionButtonText}>+ Create Team</Text>
-          </TouchableOpacity>
-        )}
+        {/* Standings List */}
+        <StandingsList
+          data={segment === "Singles" ? singlesStandings : doublesStandings}
+          segment={segment as "Singles" | "Doubles"}
+          onChallenge={(item) => {
+            setChallengeTarget(item);
+            setModalVisible(true);
+          }}
+          userTeams={userTeamDetails.map(team => team.team_id)}
+        />
 
-        {/* Team creation modal */}
+        {/* Team Creation Modal */}
         <TeamCreationModal
-          visible={modalVisible}
-          onClose={() => setModalVisible(false)}
-          onCreateTeam={({ name, members }) => handleCreateTeam({ name, members })}
+          visible={false}
+          onClose={() => {}}
+          onCreateTeam={handleCreateTeam}
           userRole={userProfile.roles[0] || ''}
           userId={userId || ''}
           vineId={vineId || ''}
         />
-        
-        {/* Challenge confirmation modal */}
-        {challengeTarget && (
+
+        {/* Challenge Modal */}
+        {modalVisible && challengeTarget && (
           <Modal
-            visible={!!challengeTarget}
-            transparent
             animationType="slide"
-            onRequestClose={() => setChallengeTarget(null)}
+            transparent={true}
+            visible={modalVisible}
+            onRequestClose={() => {
+              setModalVisible(false);
+              setChallengeTarget(null);
+            }}
           >
-            <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
               <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>
                   Challenge {challengeTarget && ('name' in challengeTarget ? challengeTarget.name : '')}?
@@ -666,43 +685,44 @@ export default function Home() {
                 {challengeTarget && 'user_id' in challengeTarget ? (
                   <>
                     <Text style={styles.modalText}>
-                      Rank: {challengeTarget.position}   Rating: {challengeTarget.rating}
+                      Rank: {challengeTarget.position || 'N/A'}   Rating: {challengeTarget.rating || 'N/A'}
                     </Text>
                     <Text style={styles.modalText}>
-                      W-L: {challengeTarget.wins}-{challengeTarget.losses}  
-                      Win%: {(challengeTarget.wins + challengeTarget.losses) > 0 
-                        ? Math.round((challengeTarget.wins / (challengeTarget.wins + challengeTarget.losses)) * 100) 
+                      W-L: {(challengeTarget.wins || 0)}-{(challengeTarget.losses || 0)}  
+                      Win%: {((challengeTarget.wins || 0) + (challengeTarget.losses || 0)) > 0 
+                        ? Math.round(((challengeTarget.wins || 0) / ((challengeTarget.wins || 0) + (challengeTarget.losses || 0))) * 100) 
                         : 0}%
                     </Text>
                   </>
                 ) : challengeTarget && 'team_id' in challengeTarget ? (
                   <>
                     <Text style={styles.modalText}>
-                      Members: {challengeTarget.members.join(", ")}
+                      Members: {(challengeTarget.members || []).join(", ") || 'No members'}
                     </Text>
                     <Text style={styles.modalText}>
-                      W-L: {challengeTarget.wins}-{challengeTarget.losses}  
-                      Win%: {(challengeTarget.wins + challengeTarget.losses) > 0 
-                        ? Math.round((challengeTarget.wins / (challengeTarget.wins + challengeTarget.losses)) * 100) 
+                      W-L: {(challengeTarget.wins || 0)}-{(challengeTarget.losses || 0)}  
+                      Win%: {((challengeTarget.wins || 0) + (challengeTarget.losses || 0)) > 0 
+                        ? Math.round(((challengeTarget.wins || 0) / ((challengeTarget.wins || 0) + (challengeTarget.losses || 0))) * 100) 
                         : 0}%
                     </Text>
                   </>
                 ) : null}
-                
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity
-                    style={styles.confirmButton}
-                    onPress={handleCreateChallenge}
-                  >
-                    <Text style={styles.confirmButtonText}>Send Challenge</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={() => setChallengeTarget(null)}
-                  >
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
+
+                <TouchableOpacity
+                  style={styles.confirmButton}
+                  onPress={handleCreateChallenge}
+                >
+                  <Text style={styles.confirmButtonText}>Send Challenge</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => {
+                    setModalVisible(false);
+                    setChallengeTarget(null);
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
               </View>
             </View>
           </Modal>
@@ -710,10 +730,13 @@ export default function Home() {
       </View>
     </BackgroundWrapper>
   );
+};
+
+type Styles = {
+  [key: string]: ViewStyle | TextStyle;
 }
 
-// Styles
-const styles = StyleSheet.create({
+const styles: Styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: "flex-start",
@@ -737,104 +760,73 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   segmentedControl: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginBottom: 16,
-    borderRadius: 16,
-    backgroundColor: "#D0F2E8",
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
-  segment: {
-    flex: 1,
-    padding: 12,
-    alignItems: "center",
-    borderRadius: 16,
-  },
-  segmentActive: {
-    backgroundColor: "#FFD54F",
-  },
-  segmentText: {
-    fontFamily: "Roboto-Regular",
-    color: "#1A3C34",
-    fontSize: 16,
-  },
-  segmentTextActive: {
-    fontFamily: "Roboto-Bold",
-    color: "#1A3C34",
-  },
-  emptyStateContainer: {
-    padding: 24, 
-    alignItems: 'center'
-  },
-  emptyStateText: {
-    color: '#888', 
-    fontSize: 18, 
-    marginVertical: 16,
-    textAlign: 'center'
-  },
-  coordinatorText: {
-    color: '#888', 
-    fontSize: 16,
-    textAlign: 'center'
-  },
-  actionButton: {
-    backgroundColor: "#FFD54F",
-    borderRadius: 20,
-    alignSelf: "center",
+  segmentButton: {
     paddingVertical: 10,
-    paddingHorizontal: 28,
-    marginTop: 10,
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    backgroundColor: COLORS.secondary,
+    borderRadius: 10,
+    marginHorizontal: 5,
   },
-  actionButtonText: {
-    color: "#1A3C34",
-    fontFamily: "Roboto-Bold",
-    fontSize: 16,
+  segmentButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
-  modalOverlay: {
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    backgroundColor: 'rgba(0,0,0,0.4)'
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalContent: {
-    backgroundColor: '#fff', 
-    padding: 24, 
-    borderRadius: 12, 
-    minWidth: 280, 
-    alignItems: 'center'
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    width: '80%',
   },
   modalTitle: {
     fontSize: 18, 
     fontWeight: 'bold', 
-    marginBottom: 8
+    marginBottom: 15,
+    color: COLORS.secondary,
   },
   modalText: {
-    fontSize: 15, 
-    marginBottom: 8
-  },
-  modalButtons: {
-    flexDirection: 'row', 
-    marginTop: 16
+    marginBottom: 10,
+    textAlign: 'center',
   },
   confirmButton: {
-    paddingVertical: 8, 
-    paddingHorizontal: 18, 
-    backgroundColor: COLORS.primaryGradient[1], 
-    borderRadius: 8, 
-    marginRight: 8
+    backgroundColor: COLORS.primaryGradient[0],
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 10,
+    width: '100%',
+    alignItems: 'center',
   },
   confirmButtonText: {
-    color: '#fff', 
-    fontWeight: 'bold'
+    color: COLORS.secondary,
+    fontWeight: 'bold',
   },
   cancelButton: {
-    paddingVertical: 8, 
-    paddingHorizontal: 18, 
-    backgroundColor: '#eee', 
-    borderRadius: 8
+    backgroundColor: 'transparent',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 10,
+    width: '100%',
+    alignItems: 'center',
   },
   cancelButtonText: {
-    color: COLORS.secondary, 
-    fontWeight: 'bold'
+    color: 'gray',
   }
 });
