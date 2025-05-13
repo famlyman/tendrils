@@ -3,12 +3,14 @@ import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert, ViewStyle, TextStyle } from "react-native";
 import { useRouter } from "expo-router";
 import { supabase } from "../../supabase";
+import 'react-native-get-random-values';
+import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from "../../context/AuthContext";
 import BackgroundWrapper from "../../components/BackgroundWrapper";
 import TeamCreationModal from "../../components/TeamCreationModal";
 import LadderSelector from "../../components/LadderSelector";
 import StandingsList from "../../components/StandingsList";
-import type { StandingsItem } from "../../components/StandingsList";
+import type { StandingsItem as ImportedStandingsItem } from "../../components/StandingsList";
 
 // Constants
 const SEGMENTS = ["Singles", "Doubles"];
@@ -22,6 +24,7 @@ interface SinglesStanding {
   losses: number;
   position: number;
   ladder_id: string;
+  opponentName?: string;
 }
 
 interface DoublesStanding {
@@ -33,6 +36,7 @@ interface DoublesStanding {
   losses: number;
   position: number;
   ladder_id: string;
+  opponentName?: string;
 }
 
 interface Ladder {
@@ -49,11 +53,11 @@ interface TeamMember {
 
 interface TeamData {
   team_id: string;
-  teams?: {
-    name?: string;
+  teams: {
+    name: string | null;
     team_id?: string;
     team_members?: { user_id: string }[];
-  };
+  } | null;
 }
 
 interface Team {
@@ -67,7 +71,14 @@ interface TeamMemberWithTeam extends TeamMember {
   teams?: Team;
 }
 
-type ChallengeTarget = StandingsItem | null;
+type ChallengeTarget = (ImportedStandingsItem & {
+  opponentName?: string;
+  opponentUserId?: string;
+  team_id?: string;
+  user_id?: string;
+  team_name?: string;
+  teams?: { name?: string };
+}) | null;
 
 // Safe color access with fallbacks
 const COLORS = {
@@ -86,10 +97,33 @@ export default function Home() {
   const [vineId, setVineId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [userTeams, setUserTeams] = useState<string[]>([]);
-  const [userTeamDetails, setUserTeamDetails] = useState<Array<{team_id: string, name: string, members: string[]}>>([]);
+  const [userTeamDetails, setUserTeamDetails] = useState<Array<{team_id: string, name: string, members: { user_id: string, name: string }[]}>>([]);
+  const [targetTeamMembers, setTargetTeamMembers] = useState<{ user_id: string, name: string }[]>([]);
   const [userProfile, setUserProfile] = useState<{ roles: string[] }>({ roles: [] });
   const [ladders, setLadders] = useState<Ladder[]>([]);
   const [selectedLadder, setSelectedLadder] = useState<Ladder | null>(null);
+
+  // Fetch target team members when challengeTarget changes (for Doubles)
+  React.useEffect(() => {
+    const fetchTargetTeamMembers = async () => {
+      if (segment === "Doubles" && challengeTarget && 'team_id' in challengeTarget && challengeTarget.team_id) {
+        const { data: memberData } = await supabase
+          .from('team_members')
+          .select('user_id, profiles(name)')
+          .eq('team_id', challengeTarget.team_id);
+        setTargetTeamMembers(
+          (memberData as { user_id: string; profiles?: { name?: string } }[] || []).map(m => ({
+            user_id: m.user_id,
+            name: m.profiles?.name || 'Unknown',
+          })) as { user_id: string; name: string }[]
+        );
+      } else {
+        setTargetTeamMembers([]);
+      }
+    };
+    fetchTargetTeamMembers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [challengeTarget, segment]);
 
   // Hooks
   const router = useRouter();
@@ -163,40 +197,42 @@ export default function Home() {
       // Fetch user teams with details
       const { data: teamsData, error: teamsError } = await supabase
         .from('team_members')
-        .select('team_id, teams!fk_team_members_team_id(name, team_id, team_members!fk_team_members_team_id(user_id))')
-        .eq('user_id', userId)
-        .eq('vine_id', vineId);
+        .select('team_id, teams!fk_team_members_team_id(name)')
+        .eq('user_id', userId);
 
       if (teamsError) {
-        console.error('Failed to fetch user teams:', teamsError);
         setUserTeams([]);
         setUserTeamDetails([]);
+        Alert.alert('Error', 'Failed to fetch user teams.');
       } else {
-        const teamDetails = (teamsData as TeamData[] || []).reduce((acc, item) => {
-        // Type guard to ensure we only process valid team member entries
-        if (item.team_id && item.teams) {
-          const teamMembers = item.teams.team_members?.map((m: { user_id: string }) => m.user_id) || [];
-          const teamDetail = {
-            team_id: item.team_id,
-            name: item.teams.name || 'Unnamed Team',
-            members: teamMembers,
-            wins: 0,  // Default wins
-            losses: 0  // Default losses
-          };
-          acc.push(teamDetail);
-        }
-        return acc;
-      }, [] as Array<{team_id: string, name: string, members: string[], wins: number, losses: number}>);
+        const teamIds = (teamsData || []).map(item => item.team_id);
+        setUserTeams(teamIds);
 
-      setUserTeams(teamDetails.map(team => team.team_id));
-      setUserTeamDetails(teamDetails);
+        const teamDetails = await Promise.all((teamsData || []).map(async item => {
+          let members: { user_id: string, name: string }[] = [];
+          if (item.team_id) {
+            const { data: memberData } = await supabase
+              .from('team_members')
+              .select('user_id, profiles(name)')
+              .eq('team_id', item.team_id);
+            members = (memberData as { user_id: string; profiles?: { name?: string } }[] || []).map(m => ({
+              user_id: m.user_id,
+              name: m.profiles?.name || 'Unknown',
+            }));
+          }
+          return {
+            team_id: item.team_id,
+            name: item.teams?.[0]?.name || 'Unnamed Team',
+            members,
+          };
+        }));
+        setUserTeamDetails(teamDetails);
       }
-    } catch (e) {
-      console.error('Unexpected error:', e);
+    } catch (error) {
       setUserProfile({ roles: [] });
       setUserTeams([]);
       setUserTeamDetails([]);
-      Alert.alert('Error', 'An unexpected error occurred.');
+      Alert.alert('Error', 'An unexpected error occurred while fetching user data.');
     }
   }, [userId, vineId]);
 
@@ -519,33 +555,284 @@ export default function Home() {
 
   // Create a challenge against another player/team
   const handleCreateChallenge = async () => {
+    console.log('Challenge Creation Started', {
+      segment,
+      challengeTarget,
+      userId,
+      ladderID: selectedLadder?.ladder_id,
+      vineId
+    });
+
     if (!challengeTarget) {
       Alert.alert("Error", "No valid target selected");
       return;
     }
+
+    // Validate required fields for challenge creation
+    if (!userId) {
+      Alert.alert("Error", "User ID is required");
+      return;
+    }
+
+    if (!selectedLadder?.ladder_id) {
+      Alert.alert("Error", "Please select a ladder");
+      return;
+    }
+
+    if (!vineId) {
+      Alert.alert("Error", "Vine ID is required");
+      return;
+    }
     
     try {
-      // Data structure would depend on your database schema
-      const { error } = await supabase
-        .from('challenges')
-        .insert({
-          challenger_id: userId,
-          challenger_type: segment === "Singles" ? "user" : "team",
-          target_id: 'user_id' in challengeTarget ? challengeTarget.user_id : challengeTarget.team_id,
-          target_type: segment === "Singles" ? "user" : "team",
-          ladder_id: selectedLadder?.ladder_id,
-          vine_id: vineId,
-          status: "pending"
+      // Detailed logging for doubles challenge
+      if (segment === "Doubles") {
+        console.log('Doubles Challenge Details', {
+          challengeTargetType: 'team_id' in challengeTarget ? 'team' : 'unknown',
+          challengeTargetId: 'team_id' in challengeTarget ? challengeTarget.team_id : 'N/A'
+        });
+      }
+
+      // Validate challenge target for doubles
+      if (segment === "Doubles" && !('team_id' in challengeTarget)) {
+        Alert.alert("Error", "Invalid doubles challenge target");
+        return;
+      }
+
+      // Detailed logging of challenge target for debugging
+      console.log('Challenge Target Details for Opponent Selection', {
+        segment,
+        challengeTarget: JSON.stringify(challengeTarget, null, 2),
+        challengeTargetKeys: Object.keys(challengeTarget),
+        playerName: segment === 'Singles' ? challengeTarget.player_name : ('name' in challengeTarget ? challengeTarget.name : undefined)
+      });
+
+      // Fetch additional player details for logging and potential name display
+      let opponentName = 'Unknown Opponent';
+      let opponentUserId: string | null = null;
+
+      console.log('Challenge Target Initial State', {
+        segment,
+        challengeTarget: JSON.stringify(challengeTarget, null, 2)
+      });
+
+      const isValidName = (name?: string) => 
+        name && name.trim().length > 0 && name !== challengeTarget?.team_id;
+
+      try {
+        if (segment === 'Singles' && challengeTarget && 'user_id' in challengeTarget) {
+          const { data: playerData, error: playerError } = await supabase
+            .from('profiles')
+            .select('full_name, user_id, player_name')
+            .eq('user_id', challengeTarget.user_id)
+            .single();
+
+          console.log('Singles Player Details Fetch', {
+            userId: challengeTarget.user_id,
+            playerData,
+            playerError,
+            challengeTargetPlayerName: challengeTarget.player_name
+          });
+
+          const nameOptions = [
+            playerData?.full_name,
+            playerData?.player_name,
+            challengeTarget.player_name
+          ];
+
+          opponentName = nameOptions.find(isValidName) || 'Unknown Opponent';
+          opponentUserId = challengeTarget.user_id || null;
+
+        } else if (segment === 'Doubles' && challengeTarget && 'team_id' in challengeTarget) {
+          const { data: teamData, error: teamError } = await supabase
+            .from('teams')
+            .select('team_id, name, team_members!fk_team_members_team_id(user_id)')
+            .eq('team_id', challengeTarget.team_id)
+            .single();
+
+          console.log('Doubles Team Details Fetch', {
+            teamId: challengeTarget.team_id,
+            teamData: JSON.stringify(teamData, null, 2),
+            teamError: JSON.stringify(teamError, null, 2)
+          });
+
+          const nameOptions = [
+            challengeTarget?.team_name || challengeTarget?.name || challengeTarget?.teams?.name,
+            teamData?.name
+          ];
+
+          opponentName = nameOptions.find(isValidName) || `Team ${challengeTarget.team_id}`;
+
+          // Fetch team members separately
+          const { data: teamMembersData } = await supabase
+            .from('team_members')
+            .select('user_id, profiles(full_name)')
+            .eq('team_id', challengeTarget.team_id);
+
+          // Select first team member as opponent
+          const teamMembers = teamMembersData || [];
+          if (teamMembers.length > 0) {
+            opponentUserId = teamMembers[0].user_id;
+          }
+
+          console.log('Doubles Opponent Name', { opponentName, opponentUserId });
+        }
+      } catch (fetchError) {
+        console.error('Error fetching challenge details', fetchError);
+      }
+
+      if (!opponentUserId) {
+        console.error('Opponent User ID Selection Failed', {
+          segment,
+          challengeTarget: JSON.stringify(challengeTarget, null, 2)
+        });
+        Alert.alert("Error", "Could not determine opponent user ID. Please check team configuration.");
+        return;
+      }
+
+      console.log('Selected Opponent User ID', { opponentUserId });
+
+      // Data structure for challenge insert
+      const challengeData = {
+        flower_id: uuidv4(), // Generate a new UUID
+        challenger_id: userId,
+        opponent_id: opponentUserId,
+        ladder_id: selectedLadder.ladder_id,
+        vine_id: vineId,
+        status: "pending",
+        date: new Date().toISOString(),
+        result: null,
+        score: null,
+        team_1_id: segment === 'Doubles' && 'team_id' in challengeTarget ? challengeTarget.team_id : null,
+        team_2_id: null // We'll leave this null for now
+      };
+
+      console.log('Challenge Insert Data', challengeData);
+
+      // Validate challenge data before insert
+      type ChallengeDataType = typeof challengeData & Record<string, any>;
+      const requiredFields = ['flower_id', 'challenger_id', 'opponent_id', 'ladder_id', 'vine_id', 'status', 'date'] as const;
+      const missingFields = requiredFields.filter(field => !(challengeData as ChallengeDataType)[field]);
+      
+      if (missingFields.length > 0) {
+        console.error('Missing Challenge Fields', missingFields);
+        Alert.alert("Error", `Missing required fields: ${missingFields.join(', ')}`);
+        return;
+      }
+
+      try {
+        // Diagnostic logging of Supabase configuration
+        console.log('Supabase Client Configuration', {
+          url: await supabase.auth.getUser() ? 'Configured' : 'Not Fully Configured',
+          // Avoid accessing protected properties
+        });
+
+        // Validate table existence and schema
+        try {
+          const { data: tableCheck, error: tableError } = await supabase
+            .from('flowers')
+            .select('*')
+            .limit(1);
+          
+          console.log('Challenges Table Check', {
+            tableExists: tableError === null,
+            sampleData: tableCheck,
+            tableErrorDetails: tableError
+          });
+        } catch (tableCheckError) {
+          console.error('Table Existence Check Failed', tableCheckError instanceof Error ? tableCheckError.message : tableCheckError);
+        }
+
+        // Detailed logging of exact insert payload
+        console.log('Supabase Challenge Insert Payload', {
+          table: 'flowers',
+          data: challengeData,
+          userId,
+          segment,
+          challengeTarget,
+          // Add more contextual information
+          challengeTargetKeys: Object.keys(challengeTarget),
+          challengeDataKeys: Object.keys(challengeData)
+        });
+
+        // Attempt to insert challenge with comprehensive error handling
+        const { data, error } = await supabase
+          .from('flowers')
+          .insert(challengeData)
+          .select();
+
+        // Log the raw Supabase response with more details
+        console.log('Supabase Raw Response', {
+          response: { data, error },
+          data,
+          error,
+          status: 200,
+          statusText: 'OK'
+        });
+
+        // Additional error checking
+        // Define a type for Supabase error details
+        type SupabaseErrorDetails = {
+          message?: string;
+          details?: string;
+          code?: string;
+          hint?: string;
+        };
+
+        const errorDetails: SupabaseErrorDetails = error || {};
+
+        if (error) {
+          // Capture and log every possible error detail
+          console.error('Challenge Creation Detailed Error', {
+            fullErrorObject: error,
+            message: error.message ?? 'No error message',
+            details: error.details ?? 'No details',
+            code: error.code ?? 'No error code',
+            hint: error.hint ?? 'No hint',
+            // Additional context
+            challengeData,
+            userId,
+            segment
+          });
+
+          // Comprehensive error type checking
+          const errorCode = error.code;
+          if (errorCode === '23505') {
+            Alert.alert("Error", "A similar challenge already exists.");
+          } else if (errorCode === '23503') {
+            Alert.alert("Error", "Invalid reference in challenge data.");
+          } else if (error.message) {
+            Alert.alert("Error", error.message);
+          } else {
+            Alert.alert("Error", "An unknown error occurred while creating the challenge.");
+          }
+        } else if (Array.isArray(data)) {
+          console.log('Challenge Created Successfully', data);
+          Alert.alert("Success", "Challenge sent!");
+          setChallengeTarget(null);
+          setModalVisible(false);
+        } else {
+          // Unexpected case: no error but also no data
+          console.warn('Challenge insert completed without data or error');
+          Alert.alert("Warning", "Challenge may not have been created.");
+        }
+      } catch (catchError) {
+        // Capture any unexpected errors during the entire process
+        console.error('Unexpected Challenge Creation Error', {
+          error: catchError,
+          challengeData,
+          userId,
+          segment
         });
         
-      if (error) {
-        Alert.alert("Error", error.message);
-      } else {
-        Alert.alert("Success", "Challenge sent!");
-        setChallengeTarget(null);
+        Alert.alert(
+          "Critical Error", 
+          catchError instanceof Error ? catchError.message : "An unexpected error occurred"
+        );
       }
     } catch (e) {
-      Alert.alert("Error", "Failed to send challenge.");
+      console.error('Challenge Creation Catch Error', e);
+      Alert.alert("Error", "Failed to send challenge. " + (e instanceof Error ? e.message : String(e)));
     }
   };
 
@@ -679,31 +966,28 @@ export default function Home() {
             <View style={styles.modalContainer}>
               <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>
-                  Challenge {challengeTarget && ('name' in challengeTarget ? challengeTarget.name : '')}?
+                  Challenge {challengeTarget?.opponentName || challengeTarget?.name || challengeTarget?.player_name || 'Opponent'}?
                 </Text>
-                
-                {challengeTarget && 'user_id' in challengeTarget ? (
-                  <>
-                    <Text style={styles.modalText}>
-                      Rank: {challengeTarget.position || 'N/A'}   Rating: {challengeTarget.rating || 'N/A'}
-                    </Text>
-                    <Text style={styles.modalText}>
-                      W-L: {(challengeTarget.wins || 0)}-{(challengeTarget.losses || 0)}  
-                      Win%: {((challengeTarget.wins || 0) + (challengeTarget.losses || 0)) > 0 
-                        ? Math.round(((challengeTarget.wins || 0) / ((challengeTarget.wins || 0) + (challengeTarget.losses || 0))) * 100) 
-                        : 0}%
-                    </Text>
-                  </>
+                {segment === "Singles" && 'user_id' in challengeTarget ? (
+                  <Text style={styles.modalText}>
+                    <Text style={{ fontWeight: 'bold' }}>Opponent Name:</Text>{"\n"}
+                    {challengeTarget.opponentName || challengeTarget.player_name || challengeTarget.name || 'Unknown Opponent'}
+                  </Text>
                 ) : challengeTarget && 'team_id' in challengeTarget ? (
                   <>
                     <Text style={styles.modalText}>
-                      Members: {(challengeTarget.members || []).join(", ") || 'No members'}
+                      <Text style={{ fontWeight: 'bold' }}>Opponent Team Name:</Text>{"\n"}
+                      {challengeTarget.opponentName || challengeTarget.name || 'Unknown Team'}
                     </Text>
                     <Text style={styles.modalText}>
-                      W-L: {(challengeTarget.wins || 0)}-{(challengeTarget.losses || 0)}  
-                      Win%: {((challengeTarget.wins || 0) + (challengeTarget.losses || 0)) > 0 
-                        ? Math.round(((challengeTarget.wins || 0) / ((challengeTarget.wins || 0) + (challengeTarget.losses || 0))) * 100) 
-                        : 0}%
+                      <Text style={{ fontWeight: 'bold' }}>Opponent Team Members:</Text>{"\n"}
+                      {targetTeamMembers.length > 0 ? (
+                        targetTeamMembers.map(m => (
+                          <Text key={m.user_id}>{m.name}{"\n"}</Text>
+                        ))
+                      ) : (
+                        <Text>No team members found{"\n"}</Text>
+                      )}
                     </Text>
                   </>
                 ) : null}
